@@ -63,7 +63,7 @@ export const Characters = {
     name: "耀阳行者",
     maxHp: 100,
     attack: 11,
-    moveSpeed: 200,
+    moveSpeed: 2000,
     attackSpeed: 480,
     critChance: 0.06,
     critDamageMult: 1.52,
