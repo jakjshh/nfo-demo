@@ -1,5 +1,6 @@
 import * as Phaser from "phaser"
 import { Characters } from "../data/CharacterConfig"
+import { loadGold } from "../data/persist"
 
 /**
  * 选角：列表可滚动（滚轮 / 触屏拖动）、方向键移动高亮、Enter 确认。
@@ -31,7 +32,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
       .setDepth(10)
 
     this.add
-      .text(cx, 64, "↑↓ 选择 · Enter 开始 · 滚轮/拖动滚动 · 点击卡片", {
+      .text(cx, 64, `↑↓ · Enter 开战 · T/育成 技能树 · 持有金币 ${loadGold()}`, {
         fontSize: "12px",
         color: "#8899aa"
       })
@@ -58,7 +59,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
         .setOrigin(0.5)
 
       const sub = this.add
-        .text(cx, y + 14, "初始武器/技能 Lv.1 · 局内新获得从 Lv.0 升", {
+        .text(cx, y + 14, "一堆bug不会修都别选直接选耀阳行者", {
           fontSize: "11px",
           color: "#8899aa"
         })
@@ -71,7 +72,21 @@ export default class CharacterSelectScene extends Phaser.Scene {
         this.scene.start("GameScene")
       })
 
-      this.cardEntries.push({ key, card, title, sub, baseY: y })
+      const detailBtn = this.add
+        .text(cx - Math.min(150, w * 0.22), y, "育成", {
+          fontSize: "15px",
+          color: "#8ad8ff"
+        })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+
+      detailBtn.on("pointerdown", pointer => {
+        pointer.event?.stopPropagation?.()
+        this.registry.set("detailCharacter", key)
+        this.scene.start("DetailScene")
+      })
+
+      this.cardEntries.push({ key, card, title, sub, detailBtn, baseY: y })
     })
 
     this.dragging = false
@@ -118,6 +133,12 @@ export default class CharacterSelectScene extends Phaser.Scene {
       this.scene.start("GameScene")
     })
 
+    this.input.keyboard.on("keydown-T", () => {
+      const key = this.charKeys[this.selectedIndex]
+      this.registry.set("detailCharacter", key)
+      this.scene.start("DetailScene")
+    })
+
     this.layoutList()
     this.refreshHighlight()
 
@@ -154,11 +175,13 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   layoutList() {
     const cx = this.scale.width / 2
+    const ox = Math.min(150, this.scale.width * 0.22)
     this.cardEntries.forEach(e => {
       const y = e.baseY - this.scrollY
       e.card.setPosition(cx, y)
       e.title.setPosition(cx, y - 12)
       e.sub.setPosition(cx, y + 14)
+      if (e.detailBtn) e.detailBtn.setPosition(cx - ox, y)
     })
   }
 

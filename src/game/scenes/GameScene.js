@@ -4,11 +4,22 @@ import { WEAPON_META, SKILL_META, WEAPON_UI_SLOT_COUNT, SKILL_UI_SLOT_COUNT } fr
 import SkillSystem from "../systems/SkillSystem"
 import BasePlayer from "../entities/BasePlayer"
 import SpawnSystem from "../systems/SpawnSystem"
-
+import { ensurePlaceholderTextures } from "../boot/ensurePlaceholderTextures"
+import AudioHub from "../systems/AudioHub"
+import NetClient from "../net/NetClient"
+import { loadGold, saveGold, getMetaForCharacter } from "../data/persist"
+import { BulletTextureKey, CharacterTextureKey } from "../data/assetKeys"
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene")
+    this.audioHub = null
+  }
+
+  preload() {
+    ensurePlaceholderTextures(this)
+    this.audioHub = new AudioHub(this)
+    this.audioHub.preload()
   }
 
   isPausedGameplay() {
@@ -20,6 +31,10 @@ export default class GameScene extends Phaser.Scene {
     this.WORLD_W = 2000
     this.WORLD_H = 2000
     this.playMargin = 80
+    this.runGold = 0
+    this.net = null
+    this.remotePlayerGhost = null
+    this.bgTile = null
 
     this.selectUiOpen = false
     this.gameOverActive = false
@@ -48,19 +63,73 @@ export default class GameScene extends Phaser.Scene {
 
     this.drawMapBoundaries()
 
+    this.bgTile = this.add
+      .tileSprite(0, 0, this.WORLD_W, this.WORLD_H, "bg_map")
+      .setOrigin(0, 0)
+      .setDepth(-2500)
+      .setScrollFactor(1)
+
+    /*
+     * ========== 地图碰撞（图片/瓦片）基础架构 ==========
+     * 1) 用 Tiled 做碰撞层导出 JSON，与背景同尺寸对齐。
+     * this.load.tilemapTiledJSON("level1", "assets/levels/stage1.json")
+     * const map = this.make.tilemap({ key: "level1" })
+     * const ts = map.addTilesetImage("terrain", "tiles_sheet")
+     * const ground = map.createLayer("ground", ts, 0, 0)
+     * const collide = map.createLayer("collision", ts, 0, 0)
+     * collide.setCollisionByProperty({ collides: true })
+     * this.physics.add.collider(this.player.sprite, collide)
+     *
+     * 2) 或从图片用 PhysicsEditor 导出多边形，staticBody + setFromPhysicsEditor
+     * ==================================================
+     */
+
     this.events.on("postupdate", () => {
       if (this.player) this.player.clampToPlayArea()
       if (!this.isPausedGameplay()) this.applyBlackHolePull()
     })
 
     const selected = this.registry.get("character") || "ranger"
-    const config = Characters[selected]
+    const baseCfg = Characters[selected]
+    const meta = getMetaForCharacter(selected)
+    const config = {
+      ...baseCfg,
+      _charId: selected,
+      maxHp: baseCfg.maxHp + (meta.hp || 0) * 10,
+      attack: baseCfg.attack + (meta.atk || 0) * 2,
+      moveSpeed: baseCfg.moveSpeed + (meta.spd || 0) * 6,
+      metaDefense: (meta.def || 0) * 1
+    }
+
+    if (!this.registry.get("playMode")) this.registry.set("playMode", "solo")
 
     this.player = new BasePlayer(this, 1000, 1000, config)
     this.player.skillSystem = new SkillSystem(this.player)
     this.player.skillSystem.initFromCharacter(config)
     this.player.refreshShieldFromWeapon()
     this.player.restartWeaponTimers()
+
+    this.audioHub.boot()
+    this.audioHub.startBgm()
+
+    if (this.registry.get("playMode") === "online") {
+      const url = import.meta.env?.VITE_WS_URL || "ws://127.0.0.1:8787"
+      this.net = new NetClient(url)
+      this.net.connect(
+        () => {},
+        () => {}
+      )
+      const gt =
+        CharacterTextureKey[selected] && this.textures.exists(CharacterTextureKey[selected])
+          ? CharacterTextureKey[selected]
+          : "__WHITE"
+      this.remotePlayerGhost = this.add
+        .sprite(900, 900, gt)
+        .setAlpha(0.42)
+        .setDepth(480)
+        .setDisplaySize(40, 40)
+      this.remotePlayerGhost.setVisible(false)
+    }
 
     this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12)
 
@@ -125,6 +194,12 @@ export default class GameScene extends Phaser.Scene {
 
     this.input.keyboard.on("keydown-R", () => {
       if (this.gameOverActive) this.scene.start("SelectScene")
+    })
+
+    this.events.once("shutdown", () => {
+      this.audioHub?.stopBgm()
+      this.net?.disconnect()
+      saveGold(loadGold() + (this.runGold || 0))
     })
 
     this.updateUIPosition(this.scale.width, this.scale.height)
@@ -198,21 +273,44 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.bossAttackTimer) this.bossAttackTimer.remove()
 
+    this._bossFireIdx = 0
     this.bossAttackTimer = this.time.addEvent({
-      delay: 2200,
+      delay: 1800,
       loop: true,
       callback: () => {
         if (!this.boss?.active || this.gameOverActive) return
-        const bx = this.boss.x
-        const by = this.boss.y
-
-        const bullet = this.physics.add.sprite(bx, by, "__WHITE")
-        this.bossBullets.add(bullet)
-        bullet.setTint(0xff3300)
-        bullet.setDisplaySize(22, 22)
-        this.physics.moveToObject(bullet, this.player.sprite, 280)
+        this._bossFireIdx++
+        if (this._bossFireIdx % 4 === 0) this.fireBossSpreadBurst()
+        else this.fireBossAimedShot()
       }
     })
+  }
+
+  fireBossAimedShot() {
+    const bx = this.boss.x
+    const by = this.boss.y
+    const tk = this.textures.exists(BulletTextureKey.bossSpread) ? BulletTextureKey.bossSpread : "__WHITE"
+    const bullet = this.physics.add.sprite(bx, by, tk)
+    this.bossBullets.add(bullet)
+    if (tk === "__WHITE") bullet.setTint(0xff3300)
+    bullet.setDisplaySize(22, 22)
+    this.physics.moveToObject(bullet, this.player.sprite, 260)
+  }
+
+  fireBossSpreadBurst() {
+    const bx = this.boss.x
+    const by = this.boss.y
+    const n = 11
+    const tk = this.textures.exists(BulletTextureKey.bossSpread) ? BulletTextureKey.bossSpread : "__WHITE"
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + Phaser.Math.FloatBetween(-0.05, 0.05)
+      const bullet = this.physics.add.sprite(bx, by, tk)
+      this.bossBullets.add(bullet)
+      if (tk === "__WHITE") bullet.setTint(0xff6633)
+      bullet.setDisplaySize(18, 18)
+      const spd = 195
+      bullet.body?.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
+    }
   }
 
   showBossWarning() {
@@ -275,13 +373,21 @@ export default class GameScene extends Phaser.Scene {
 
     if (t === "exp") {
       this.gainExp(val)
+      this.audioHub?.playSfx("pickup", 0.35)
     } else if (t === "heal") {
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + val)
       this.refreshHud()
+      this.audioHub?.playSfx("pickup", 0.35)
+    } else if (t === "gold") {
+      this.runGold += val
+      this.audioHub?.playSfx("gold", 0.45)
+      this.refreshHud()
     } else if (t === "magnetAll") {
       this.pullAllPickupsToPlayer()
+      this.audioHub?.playSfx("pickup", 0.3)
     } else if (t === "killAll") {
       this.killAllNonBossEnemies()
+      this.audioHub?.playSfx("weapon", 0.25)
     }
   }
 
@@ -394,14 +500,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   spawnCourageBullet(player, ang) {
-    const b = this.physics.add.sprite(player.sprite.x, player.sprite.y, "__WHITE")
+    const tk = this.textures.exists(BulletTextureKey.courageSong) ? BulletTextureKey.courageSong : "__WHITE"
+    const b = this.physics.add.sprite(player.sprite.x, player.sprite.y, tk)
     this.bullets.add(b)
     const w = 36 + player.courageWidthBonus
     b.setDisplaySize(w, 12)
-    b.setTint(0xaaddff)
+    if (tk === "__WHITE") b.setTint(0xaaddff)
     b.setRotation(ang)
     const spd = 300
-    b.body.velocity.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
+    b.body?.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
     const { damage, crit } = player.rollAttackDamage(player.courageDamageBonus * 0.55)
     b.damage = damage
     b.isCrit = crit
@@ -649,11 +756,26 @@ export default class GameScene extends Phaser.Scene {
   refreshHud() {
     const sh = this.player.currentShield > 0 ? ` · 护盾 ${Math.ceil(this.player.currentShield)}` : ""
     this.hudHp.setText(`生命 ${Math.ceil(this.player.hp)} / ${this.player.maxHp}${sh}`)
-    this.hudExp.setText(`等级 ${this.level} · 经验 ${this.exp} / ${this.expToNext}`)
+    this.hudExp.setText(
+      `等级 ${this.level} · 经验 ${this.exp} / ${this.expToNext} · 本局金币 ${this.runGold ?? 0}`
+    )
     this.hudTime.setText(`生存时间 ${Math.floor(this.survivalTime)} 秒`)
   }
 
   update(time, delta) {
+    if (this.net?.connected && this.player?.sprite?.body) {
+      const m = this.player.moveSpeed || 1
+      const vx = this.player.sprite.body.velocity.x
+      const vy = this.player.sprite.body.velocity.y
+      this.net.sendInput(vx / m, vy / m)
+      this.net.applyRemotePlayerForChase(this)
+    }
+
+    if (this.bgTile) {
+      this.bgTile.tilePositionX = this.cameras.main.scrollX * 0.06
+      this.bgTile.tilePositionY = this.cameras.main.scrollY * 0.06
+    }
+
     this.player.update()
     this.spawnSystem.update(time, delta)
 
@@ -979,7 +1101,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   onEnemyDamaged(enemy, damage, isCrit, playHitFx = true) {
-    if (playHitFx) this.flashEnemyHit(enemy)
+    if (playHitFx) {
+      this.flashEnemyHit(enemy)
+      this.audioHub?.playSfx("hit_enemy", 0.28)
+    }
     this.spawnDamageText(enemy.x, enemy.y, damage, isCrit)
   }
 
@@ -1001,9 +1126,10 @@ export default class GameScene extends Phaser.Scene {
 
   flashEnemyHit(enemy) {
     if (!enemy?.setTint) return
-    enemy.setTint(0xffffff)
-    this.time.delayedCall(80, () => {
-      if (enemy.active) enemy.clearTint?.()
+    const base = enemy._baseTint ?? 0xffffff
+    enemy.setTint(0xff3333)
+    this.time.delayedCall(70, () => {
+      if (enemy.active) enemy.setTint(base)
     })
   }
 
@@ -1109,7 +1235,8 @@ export default class GameScene extends Phaser.Scene {
   flashPlayerHit() {
     const s = this.player.sprite
     s.setTint(0xff6666)
-    this.time.delayedCall(120, () => s.setTint(0x00ff00))
+    this.audioHub?.playSfx("hit_player", 0.5)
+    this.time.delayedCall(120, () => s.clearTint())
   }
 
   spawnLoot(x, y) {
@@ -1165,6 +1292,14 @@ export default class GameScene extends Phaser.Scene {
         k.pickupValue = 0
         if (k.body) k.body.setCircle(10)
         this.pickups.add(k)
+      } else if (r < 0.09) {
+        const g = this.physics.add.sprite(x - 10, y + 12, "__WHITE")
+        g.setTint(0xffdd33)
+        g.setDisplaySize(14, 14)
+        g.pickupType = "gold"
+        g.pickupValue = 1 + Math.floor(Math.random() * 3)
+        if (g.body) g.body.setCircle(7)
+        this.pickups.add(g)
       }
     }
   }
@@ -1173,6 +1308,9 @@ export default class GameScene extends Phaser.Scene {
     if (this.gameOverActive) return
 
     this.gameOverActive = true
+    saveGold(loadGold() + (this.runGold || 0))
+    this.runGold = 0
+
     this.physics.pause()
 
     const cam = this.cameras.main

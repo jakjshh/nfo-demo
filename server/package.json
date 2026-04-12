@@ -1,0 +1,11 @@
+{
+  "name": "nfo2-room-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node authoritative-room.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

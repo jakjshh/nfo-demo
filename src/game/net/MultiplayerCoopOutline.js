@@ -56,3 +56,5 @@ import BasePlayer from "../entities/BasePlayer"
  */
 
 export const MULTIPLAYER_README = "See comments in MultiplayerCoopOutline.js"
+
+// 可运行骨架：server/authoritative-room.mjs（npm start）+ 环境变量 VITE_WS_URL

@@ -7,6 +7,27 @@ export default class SpawnSystem {
     this.nextBossAt = 60
   }
 
+  getChasePoints(scene, player) {
+    const pts = [{ x: player.x, y: player.y }]
+    if (scene.registry.get("playMode") === "online" && scene.net?.remotePlayer?.active) {
+      pts.push({ x: scene.net.remotePlayer.x, y: scene.net.remotePlayer.y })
+    }
+    return pts
+  }
+
+  pickNearestPoint(enemy, pts) {
+    let best = pts[0]
+    let bestD = Infinity
+    for (const p of pts) {
+      const d = (p.x - enemy.x) ** 2 + (p.y - enemy.y) ** 2
+      if (d < bestD) {
+        bestD = d
+        best = p
+      }
+    }
+    return best
+  }
+
   update(time, delta) {
     const scene = this.scene
 
@@ -17,12 +38,15 @@ export default class SpawnSystem {
 
     const player = scene.player.sprite
     const st = scene.survivalTime
+    const chasePts = this.getChasePoints(scene, player)
 
     scene.enemies.getChildren().forEach(enemy => {
       if (!enemy.active) return
+      const body = enemy.body
+      if (!body) return
 
       if (enemy.freezeUntil != null && st < enemy.freezeUntil) {
-        enemy.setVelocity(0, 0)
+        body.setVelocity(0, 0)
         return
       }
 
@@ -31,7 +55,11 @@ export default class SpawnSystem {
         sp *= enemy.slowMult ?? 0.42
       }
 
-      scene.physics.moveToObject(enemy, player, sp)
+      const t = this.pickNearestPoint(enemy, chasePts)
+      const dx = t.x - enemy.x
+      const dy = t.y - enemy.y
+      const len = Math.hypot(dx, dy) || 1
+      body.setVelocity((dx / len) * sp, (dy / len) * sp)
     })
 
     const t = scene.survivalTime
@@ -121,6 +149,8 @@ export default class SpawnSystem {
       enemy.setDisplaySize(26, 26)
     }
 
+    enemy._baseTint = enemy.tintTopLeft ?? 0xffffff
+
     scene.enemies.add(enemy)
   }
 
@@ -131,6 +161,7 @@ export default class SpawnSystem {
       .setTint(0xaa0000)
       .setDisplaySize(90, 90)
 
+    boss._baseTint = 0xaa0000
     boss.isBoss = true
     boss.maxHp = 800
     boss.hp = boss.maxHp

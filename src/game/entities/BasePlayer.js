@@ -1,4 +1,5 @@
 import * as Phaser from "phaser"
+import { CharacterTextureKey, BulletTextureKey } from "../data/assetKeys"
 
 const MELEE_HALF_ARC = (Math.PI * 2) / 3
 
@@ -6,10 +7,14 @@ export default class BasePlayer {
   constructor(scene, x, y, config) {
     this.scene = scene
     this.config = config
+    this.charId = config._charId || "ranger"
 
-    this.sprite = scene.physics.add.sprite(x, y, "GREEN")
+    const heroTex =
+      scene.textures.exists(CharacterTextureKey[this.charId]) ? CharacterTextureKey[this.charId] : "__WHITE"
+    this.sprite = scene.physics.add.sprite(x, y, heroTex)
     this.sprite.setDisplaySize(48, 48)
     this.sprite.setCollideWorldBounds(false)
+    this.sprite.clearTint()
 
     this.keysWasd = scene.input.keyboard.addKeys("W,S,A,D")
 
@@ -18,7 +23,7 @@ export default class BasePlayer {
     this.attack = config.attack
     this.moveSpeed = config.moveSpeed
     this.attackSpeed = config.attackSpeed
-    this.defense = 0
+    this.defense = config.metaDefense ?? 0
     this.invulnerableUntil = 0
 
     this.critChance = config.critChance ?? 0.05
@@ -73,6 +78,8 @@ export default class BasePlayer {
     this.pixieTimer = null
 
     this.skillSystem = null
+    /** 小精灵跟随实体（发射起点） */
+    this.pixieOrb = null
   }
 
   get sys() {
@@ -166,6 +173,9 @@ export default class BasePlayer {
         loop: true,
         callback: () => this.firePixieShots()
       })
+    } else if (this.pixieOrb) {
+      this.pixieOrb.destroy()
+      this.pixieOrb = null
     }
   }
 
@@ -175,6 +185,7 @@ export default class BasePlayer {
 
     const angle = this.getFacingAngle()
     this.scene.showMeleeArcFx(this.sprite.x, this.sprite.y, angle, this.meleeRange)
+    this.scene.audioHub?.playSfx("weapon", 0.25)
 
     const targets = this.findEnemiesInMeleeArc()
     targets.forEach(enemy => {
@@ -258,7 +269,43 @@ export default class BasePlayer {
     this.updateHurricane(now)
     this.updateCourageSong(now)
     this.updateBlackHole(now)
+    this.updatePixieCompanion()
+    this.updateHeroVisual()
     this.drawShieldOutline()
+  }
+
+  updatePixieCompanion() {
+    const lv = this.sys?.getWeaponLevel("pixie") ?? 0
+    if (lv < 1) {
+      if (this.pixieOrb) {
+        this.pixieOrb.destroy()
+        this.pixieOrb = null
+      }
+      return
+    }
+    if (!this.pixieOrb && this.scene.textures.exists("tex_pixie_companion")) {
+      this.pixieOrb = this.scene.add
+        .sprite(this.sprite.x + 32, this.sprite.y, "tex_pixie_companion")
+        .setDepth(7200)
+        .setDisplaySize(22, 22)
+    }
+    if (!this.pixieOrb) return
+    const tt = this.scene.time.now * 0.0035
+    this.pixieOrb.setPosition(
+      this.sprite.x + 36 + Math.cos(tt) * 12,
+      this.sprite.y - 6 + Math.sin(tt * 1.2) * 10
+    )
+  }
+
+  /** 行走/站立：无序列帧时用缩放微动代替；有 anims 时可改 play('walk')/play('idle') */
+  updateHeroVisual() {
+    const body = this.sprite.body
+    const moving = body && (Math.abs(body.velocity.x) > 8 || Math.abs(body.velocity.y) > 8)
+    const sc = moving ? 1.05 : 1
+    this.sprite.setScale(sc)
+    // if (this.sprite.anims) {
+    //   moving ? this.sprite.play('hero_walk', true) : this.sprite.play('hero_idle', true)
+    // }
   }
 
   updateVolleyWeapon(now) {
@@ -296,11 +343,14 @@ export default class BasePlayer {
     if (targets.length === 0) return
 
     targets.forEach(enemy => {
-      const bullet = this.scene.physics.add.sprite(this.sprite.x, this.sprite.y, "__WHITE")
+      const bt = this.scene.textures.exists(BulletTextureKey.trackingVolley)
+        ? BulletTextureKey.trackingVolley
+        : "__WHITE"
+      const bullet = this.scene.physics.add.sprite(this.sprite.x, this.sprite.y, bt)
       this.scene.bullets.add(bullet)
       const sz = Math.max(6, this.bulletSize * 0.65)
       bullet.setDisplaySize(sz, sz)
-      bullet.setTint(0xffee66)
+      if (bt === "__WHITE") bullet.setTint(0xffee66)
       this.scene.physics.moveToObject(bullet, enemy, 230)
 
       const { damage, crit } = this.rollAttackDamage(bonus * 0.4)
@@ -472,15 +522,16 @@ export default class BasePlayer {
     const targets = this.pickVolleyTargets(Math.max(1, n))
     if (targets.length === 0) return
 
-    const px = this.sprite.x + 22
-    const py = this.sprite.y
+    const ox = this.pixieOrb ? this.pixieOrb.x : this.sprite.x + 22
+    const oy = this.pixieOrb ? this.pixieOrb.y : this.sprite.y
+    const bt = this.scene.textures.exists(BulletTextureKey.pixie) ? BulletTextureKey.pixie : "__WHITE"
 
     for (let i = 0; i < n; i++) {
       const tgt = targets[Math.min(i, targets.length - 1)]
-      const bullet = this.scene.physics.add.sprite(px, py, "__WHITE")
+      const bullet = this.scene.physics.add.sprite(ox, oy, bt)
       this.scene.bullets.add(bullet)
       bullet.setDisplaySize(10, 10)
-      bullet.setTint(0x99ffaa)
+      if (bt === "__WHITE") bullet.setTint(0x99ffaa)
       this.scene.physics.moveToObject(bullet, tgt, 320)
       const { damage, crit } = this.rollAttackDamage(this.pixieDamageBonus * 0.5)
       bullet.damage = damage
