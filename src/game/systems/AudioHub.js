@@ -3,34 +3,34 @@
  * 推荐格式：ogg 或 mp3（文件名见下方常量）
  */
 const FILES = {
-  bgm: "sounds/bgm.ogg",
+  bgm: "/sounds/bgm.ogg",
 
   
-  hit_player: "sounds/hit_player.ogg",
-  hit_enemy: "sounds/hit_enemy.ogg",
-  weapon: "sounds/weapon_swish.ogg",
-  pickup: "sounds/pickup.ogg",
-  gold: "sounds/coin.ogg",
+  hit_player: "/sounds/hit_player.ogg",
+  hit_enemy: "/sounds/hit_enemy.ogg",
+  weapon: "/sounds/weapon_swish.ogg",
+  pickup: "/sounds/pickup.ogg",
+  gold: "/sounds/coin.ogg",
   // 角色特定音效
   //hit_player_ranger: "sounds/hit_player_ranger.ogg",
   //hit_player_warrior: "sounds/hit_player_warrior.ogg",
   //hit_player_mage: "sounds/hit_player_mage.ogg",
   //hit_player_butterfly: "sounds/hit_player_butterfly.ogg",
-  hit_player_yyxr: "sounds/hit_yyxr.ogg",
-  hit_ranger: "sounds/hit_ranger.ogg",
-  hit_melee: "sounds/hit_melee.ogg",
-  hit_priest: "sounds/hit_priest.ogg",
-  hit_mage: "sounds/hit_mage.ogg",
-  hit_shieldbearer: "sounds/hit_shieldbearer.ogg",
-  hit_yyxr: "sounds/hit_yyxr.ogg",
-  hit_butterfly: "sounds/hit_butterfly.ogg",
-  skill_ranger: "sounds/skill_ranger.ogg",
-  skill_melee: "sounds/skill_melee.ogg",
-  skill_priest: "sounds/skill_priest.ogg",
-  skill_mage: "sounds/skill_mage.ogg",
-  skill_shieldbearer: "sounds/skill_shieldbearer.ogg",
-  skill_yyxr: "sounds/skill_yyxr.ogg",
-  skill_butterfly: "sounds/skill_butterfly.ogg"
+  hit_player_yyxr: "/sounds/hit_yyxr.ogg",
+  hit_ranger: "/sounds/hit_ranger.ogg",
+  hit_melee: "/sounds/hit_melee.ogg",
+  hit_priest: "/sounds/hit_priest.ogg",
+  hit_mage: "/sounds/hit_mage.ogg",
+  hit_shieldbearer: "/sounds/hit_shieldbearer.ogg",
+  hit_yyxr: "/sounds/hit_yyxr.ogg",
+  hit_butterfly: "/sounds/hit_butterfly.ogg",
+  skill_ranger: "/sounds/skill_ranger.ogg",
+  skill_melee: "/sounds/skill_melee.ogg",
+  skill_priest: "/sounds/skill_priest.ogg",
+  skill_mage: "/sounds/skill_mage.ogg",
+  skill_shieldbearer: "/sounds/skill_shieldbearer.ogg",
+  skill_yyxr: "/sounds/skill_yyxr.ogg",
+  skill_butterfly: "/sounds/skill_butterfly.ogg"
 }
 
 export default class AudioHub {

@@ -10,7 +10,7 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["trackingVolley"],
     startingSkills: ["attack"],
-    imagePath: "public/characters/gugugaga.png"
+    imagePath: "/characters/gugugaga.png"
   },
 
   melee: {
@@ -24,7 +24,7 @@ export const Characters = {
     critDamageMult: 1.55,
     startingWeapons: ["arc"],
     startingSkills: ["aoeRadius"],
-    imagePath: "public/characters/melee.png"
+    imagePath: "/characters/melee.png"
   },
 
   priest: {
@@ -38,7 +38,7 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["laser"],
     startingSkills: ["vitality"],
-    imagePath: "public/characters/priest.png"
+    imagePath: "/characters/priest.png"
   },
 
   mage: {
@@ -52,7 +52,7 @@ export const Characters = {
     critDamageMult: 1.52,
     startingWeapons: ["groundZones"],
     startingSkills: ["skillTempo"],
-    imagePath: "public/characters/mage.png"       
+    imagePath: "/characters/mage.png"       
   },
 
   shieldbearer: {
@@ -66,7 +66,7 @@ export const Characters = {
     critDamageMult: 1.45,
     startingWeapons: ["shieldWeapon"],
     startingSkills: ["defense"],
-    imagePath: "public/characters/shieldbearer.png"    
+    imagePath: "/characters/shieldbearer.png"    
   },
 
   yyxr: {
@@ -80,7 +80,7 @@ export const Characters = {
     critDamageMult: 1.52,
     startingWeapons: ["solarBurst"],
     startingSkills: ["skillTempo"],
-    imagePath: "public/characters/yyxr.png"
+    imagePath: "/characters/yyxr.png"
   },
 
   butterfly: {
@@ -94,6 +94,6 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["butterflyWing"],
     startingSkills: ["attack"],
-    imagePath: "public/characters/butterfly.png"
+    imagePath: "/characters/butterfly.png"
   }
 }
