@@ -109,7 +109,7 @@ export default class SkillSystem {
     for (let i = 0; i < deltaLevels; i++) {
       switch (key) {
         case "arc":
-          p.meleeRange += 6
+          p.meleeRange += 10
           break
         case "trackingVolley":
           p.volleyDamageBonus += 1

@@ -4,7 +4,7 @@ export default class SpawnSystem {
     this.lastSpawn = 0
     this.lastWaveTime = 0
     this.wave = 1
-    this.bossSpawnTimes = [60, 180, 300] // 1min, 3min, 5min
+    this.bossSpawnTimes = [1, 180, 300] // 1min, 3min, 5min
     this.spawnedBosses = 0
   }
 

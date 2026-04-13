@@ -12,7 +12,8 @@ export const CharacterTextureKey = {
   priest: "tex_hero_priest",
   mage: "tex_hero_mage",
   shieldbearer: "tex_hero_shield",
-  yyxr: "tex_hero_yyxr"
+  yyxr: "tex_hero_yyxr",
+  butterfly: "tex_hero_butterfly"
 }
 
 /** 子弹默认用键；不同武器在发射处 setTexture */

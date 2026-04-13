@@ -1,6 +1,6 @@
 export const Characters = {
   ranger: {
-    name: "远程射手",
+    name: "咕咕嘎嘎",
     description: "擅长远程攻击，使用追踪箭雨打击敌人",
     maxHp: 100,
     attack: 10,
@@ -10,7 +10,7 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["trackingVolley"],
     startingSkills: ["attack"],
-    imagePath: "assets/images/characters/ranger.png"
+    imagePath: "public/characters/gugugaga.png"
   },
 
   melee: {
@@ -24,7 +24,7 @@ export const Characters = {
     critDamageMult: 1.55,
     startingWeapons: ["arc"],
     startingSkills: ["aoeRadius"],
-    imagePath: "assets/images/characters/melee.png"
+    imagePath: "public/characters/melee.png"
   },
 
   priest: {
@@ -38,7 +38,7 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["laser"],
     startingSkills: ["vitality"],
-    imagePath: "assets/images/characters/priest.png"
+    imagePath: "public/characters/priest.png"
   },
 
   mage: {
@@ -52,7 +52,7 @@ export const Characters = {
     critDamageMult: 1.52,
     startingWeapons: ["groundZones"],
     startingSkills: ["skillTempo"],
-    imagePath: "assets/images/characters/mage.png"  
+    imagePath: "public/characters/mage.png"       
   },
 
   shieldbearer: {
@@ -66,7 +66,7 @@ export const Characters = {
     critDamageMult: 1.45,
     startingWeapons: ["shieldWeapon"],
     startingSkills: ["defense"],
-    imagePath: "assets/images/characters/shieldbearer.png"    
+    imagePath: "public/characters/shieldbearer.png"    
   },
 
   yyxr: {
@@ -80,11 +80,11 @@ export const Characters = {
     critDamageMult: 1.52,
     startingWeapons: ["solarBurst"],
     startingSkills: ["skillTempo"],
-    imagePath: "assets/images/characters/yyxr.png"
+    imagePath: "public/characters/yyxr.png"
   },
 
   butterfly: {
-    name: "蝴蝶",
+    name: "巴特福来",
     description: "轻盈敏捷，煽动翅膀对两侧敌人造成伤害和击退",
     maxHp: 120,
     attack: 10,
@@ -94,6 +94,6 @@ export const Characters = {
     critDamageMult: 1.5,
     startingWeapons: ["butterflyWing"],
     startingSkills: ["attack"],
-    imagePath: "assets/images/characters/butterfly.png"
+    imagePath: "public/characters/butterfly.png"
   }
 }

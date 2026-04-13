@@ -12,7 +12,9 @@ export default class BasePlayer {
     const heroTex =
       scene.textures.exists(CharacterTextureKey[this.charId]) ? CharacterTextureKey[this.charId] : "__WHITE"
     this.sprite = scene.physics.add.sprite(x, y, heroTex)
-    this.sprite.setDisplaySize(48, 48)
+    this.baseScale = 0.8
+    this.sprite.setScale(this.baseScale)
+
     this.sprite.setCollideWorldBounds(false)
     this.sprite.clearTint()
 
@@ -30,7 +32,7 @@ export default class BasePlayer {
     this.critDamageMult = config.critDamageMult ?? 1.5
 
     this.bulletSize = 10
-    this.meleeRange = 44
+    this.meleeRange = 60
     this.magnetRadius = 80
 
     this.durationMult = 1
@@ -80,6 +82,7 @@ export default class BasePlayer {
     this.skillSystem = null
     /** 小精灵跟随实体（发射起点） */
     this.pixieOrb = null
+    this.syncBodySize()
   }
 
   get sys() {
@@ -203,6 +206,10 @@ export default class BasePlayer {
     return Math.atan2(this.lastMoveDir.y, this.lastMoveDir.x)
   }
 
+  getProjectileBonus() {
+    return this.sys?.getLevel("projectileCount") ?? 0
+  }
+
   rollAttackDamage(flatBonus = 0) {
     const base = this.attack + flatBonus
     const crit = Math.random() < this.critChance
@@ -210,35 +217,29 @@ export default class BasePlayer {
     return { damage, crit }
   }
 
-clampToPlayArea() {
-    // 如果物理体不存在，先尝试重新启用
-    if (!this.sprite.body) {
-        console.warn('clampToPlayArea 时 body 丢失，尝试修复...');
-        this.scene.physics.world.enable(this.sprite);
-        // 如果启用后仍然没有 body，直接返回
-        if (!this.sprite.body) return;
-    }
+  syncBodySize() {
+    const body = this.sprite.body
+    if (!body) return
+    const w = Math.max(12, Math.floor(this.sprite.displayWidth * 0.48))
+    const h = Math.max(12, Math.floor(this.sprite.displayHeight * 0.62))
+    body.setSize(w, h, true)
+  }
 
-    const scene = this.scene;
-    const m = scene.playMargin ?? 0;
-    const w = scene.WORLD_W;
-    const h = scene.WORLD_H;
-    const body = this.sprite.body;
-    const hw = body.halfWidth;
-    const hh = body.halfHeight;
+  clampToPlayArea() {
+    if (!this.sprite.body) return
+    const scene = this.scene
+    const m = scene.playMargin ?? 0
+    const w = scene.WORLD_W
+    const h = scene.WORLD_H
+    const body = this.sprite.body
+    const hw = body.halfWidth
+    const hh = body.halfHeight
 
-    this.sprite.x = Phaser.Math.Clamp(this.sprite.x, m + hw, w - m - hw);
-    this.sprite.y = Phaser.Math.Clamp(this.sprite.y, m + hh, h - m - hh);
-}
+    this.sprite.x = Phaser.Math.Clamp(this.sprite.x, m + hw, w - m - hw)
+    this.sprite.y = Phaser.Math.Clamp(this.sprite.y, m + hh, h - m - hh)
+  }
 
   update() {
-    // 如果游戏未结束且玩家被隐藏，强制显示
-    if (this.sprite && !this.sprite.visible && !this.scene.gameOverActive) {
-        this.sprite.setVisible(true);
-    }
-
-
-    
     if (this.scene.isPausedGameplay?.()) {
       this.drawShieldOutline()
       return
@@ -271,9 +272,9 @@ clampToPlayArea() {
       vy /= len
     }
 
-  if (this.sprite?.body) {
-  this.sprite.setVelocity(vx * speed, vy * speed)
-}
+    if (this.sprite?.body) {
+      this.sprite.setVelocity(vx * speed, vy * speed)
+    }
 
     if (len > 0.08) {
       this.lastMoveDir.set(vx, vy).normalize()
@@ -322,7 +323,8 @@ clampToPlayArea() {
   updateHeroVisual() {
     const body = this.sprite.body
     const moving = body && (Math.abs(body.velocity.x) > 8 || Math.abs(body.velocity.y) > 8)
-    const sc = moving ? 1.05 : 1
+
+    const sc = moving ? this.baseScale * 1.05 : this.baseScale
     this.sprite.setScale(sc)
     // if (this.sprite.anims) {
     //   moving ? this.sprite.play('hero_walk', true) : this.sprite.play('hero_idle', true)
@@ -358,7 +360,7 @@ clampToPlayArea() {
 
   fireTrackingVolley() {
     const bonus = this.volleyDamageBonus
-    const lv = this.sys?.getLevel("projectileCount") ?? 0
+    const lv = this.getProjectileBonus()
     const n = Math.min(12, 5 + lv)
     const targets = this.pickVolleyTargets(n)
     if (targets.length === 0) return
@@ -462,12 +464,13 @@ clampToPlayArea() {
 
     const lv = this.sys.getWeaponLevel("groundZones")
     const count = Math.min(6, 2 + Math.floor(lv / 2))
-    const baseR = 46 + this.zoneRadiusBonus
+    const baseR = 48 + this.zoneRadiusBonus + lv * 2
+    const spread = 120 + lv * 8
     const dur = 3500 * this.durationMult
 
     for (let i = 0; i < count; i++) {
-      const ox = Phaser.Math.Between(-120, 120)
-      const oy = Phaser.Math.Between(-120, 120)
+      const ox = Phaser.Math.Between(-spread, spread)
+      const oy = Phaser.Math.Between(-spread, spread)
       this.scene.spawnGroundZone(this.sprite.x + ox, this.sprite.y + oy, baseR, dur)
     }
   }
@@ -504,7 +507,10 @@ clampToPlayArea() {
     this.hurricaneLastSpawn = now
 
     const r = 80 + this.hurricaneRadiusBonus
-    this.scene.spawnHurricane(this.sprite.x + Phaser.Math.Between(-60, 60), this.sprite.y + Phaser.Math.Between(-60, 60), r)
+    const target = this.findNearestEnemy()
+    const tx = target?.x ?? (this.sprite.x + Phaser.Math.Between(-60, 60))
+    const ty = target?.y ?? (this.sprite.y + Phaser.Math.Between(-60, 60))
+    this.scene.spawnHurricane(tx, ty, r)
   }
 
   updateCourageSong(now) {
@@ -518,8 +524,13 @@ clampToPlayArea() {
     const enemy = this.findNearestEnemy()
     if (!enemy) return
 
-    const ang = Math.atan2(enemy.y - this.sprite.y, enemy.x - this.sprite.x)
-    this.scene.spawnCourageBullet(this, ang)
+    const base = Math.atan2(enemy.y - this.sprite.y, enemy.x - this.sprite.x)
+    const extra = Math.min(4, this.getProjectileBonus())
+    const n = 1 + extra
+    for (let i = 0; i < n; i++) {
+      const spread = n === 1 ? 0 : Phaser.Math.Linear(-0.22, 0.22, i / (n - 1))
+      this.scene.spawnCourageBullet(this, base + spread)
+    }
   }
 
   updateBlackHole(now) {
@@ -531,7 +542,10 @@ clampToPlayArea() {
     this.blackHoleLastSpawn = now
 
     const r = 70 + this.blackHoleRadiusBonus
-    this.scene.spawnBlackHole(this.sprite.x + Phaser.Math.Between(-50, 50), this.sprite.y + Phaser.Math.Between(-50, 50), r)
+    const target = this.findNearestEnemy()
+    const tx = target?.x ?? (this.sprite.x + Phaser.Math.Between(-50, 50))
+    const ty = target?.y ?? (this.sprite.y + Phaser.Math.Between(-50, 50))
+    this.scene.spawnBlackHole(tx, ty, r)
   }
 
   updateButterflyWing(now) {
@@ -543,41 +557,43 @@ clampToPlayArea() {
     this.butterflyWingLastSpawn = now
 
     const facing = this.getFacingAngle()
-    const wingSpan = 80 + this.sys.getWeaponLevel("butterflyWing") * 10
-    
-    // 煽动翅膀的视觉效果
-    this.scene.add.rectangle(this.sprite.x, this.sprite.y, wingSpan * 2, 40, 0xff88ff, 0.3)
-      .setRotation(facing)
-      .setDepth(8000)
-    
-    // 对两侧敌人造成伤害和击退
+    const lv = this.sys.getWeaponLevel("butterflyWing")
+    const wingSpan = 86 + lv * 10
+    const arc = Math.PI * 0.42
+
+    ;[-Math.PI / 2, Math.PI / 2].forEach(sideOffset => {
+      const g = this.scene.add.graphics().setDepth(8050)
+      g.lineStyle(4, 0xff88ff, 0.9)
+      g.beginPath()
+      g.arc(this.sprite.x, this.sprite.y, wingSpan, facing + sideOffset - arc, facing + sideOffset + arc, false)
+      g.strokePath()
+      this.scene.tweens.add({
+        targets: g,
+        alpha: 0,
+        duration: 140,
+        onComplete: () => g.destroy()
+      })
+    })
+
     this.scene.enemies.getChildren().forEach(enemy => {
       if (!enemy.active) return
       const dx = enemy.x - this.sprite.x
       const dy = enemy.y - this.sprite.y
       const d = Math.hypot(dx, dy)
       if (d > wingSpan) return
-      
-      // 计算敌人相对于玩家的角度
-      const enemyAngle = Math.atan2(dy, dx)
-      const angleDiff = Math.abs(enemyAngle - facing)
-      
-      // 只对两侧一定角度范围内的敌人造成伤害
-      if (angleDiff > Math.PI / 4 && angleDiff < 3 * Math.PI / 4) {
-        const { damage, crit } = this.rollAttackDamage()
-        enemy.hp -= damage
-        this.scene.onEnemyDamaged(enemy, damage, crit)
-        this.scene.resolveEnemyDeath(enemy)
-        
-        // 击退效果
-        const knockback = 100 + this.sys.getWeaponLevel("butterflyWing") * 10
-        const knockbackAngle = enemyAngle + Math.PI
-        enemy.x += Math.cos(knockbackAngle) * knockback
-        enemy.y += Math.sin(knockbackAngle) * knockback
-      }
+
+      const { damage, crit } = this.rollAttackDamage(1 + lv * 0.8)
+      enemy.hp -= damage
+      this.scene.onEnemyDamaged(enemy, damage, crit)
+      this.scene.resolveEnemyDeath(enemy)
+
+      const knockback = 80 + lv * 12
+      const nx = dx / (d || 1)
+      const ny = dy / (d || 1)
+      enemy.x += nx * knockback
+      enemy.y += ny * knockback
     })
-    
-    // 播放技能音效
+
     this.scene.audioHub?.playCharacterSfx(this.charId, "skill", 0.25)
   }
 
@@ -590,39 +606,41 @@ clampToPlayArea() {
     this.bulletStringLastSpawn = now
 
     const facing = this.getFacingAngle()
-    const bulletCount = 3 + this.sys.getWeaponLevel("bulletString")
-    const bulletSpacing = 20
-    
-    // 射出一串子弹
+    const lv = this.sys.getWeaponLevel("bulletString")
+    const bulletCount = 3 + lv + Math.min(4, this.getProjectileBonus())
+    const spread = Math.min(0.55, 0.12 + lv * 0.03)
+    const bulletTex = this.scene.textures.exists(BulletTextureKey.default) ? BulletTextureKey.default : "__WHITE"
+
     for (let i = 0; i < bulletCount; i++) {
-      const bt = "__WHITE"
-      const bullet = this.scene.physics.add.sprite(this.sprite.x, this.sprite.y, bt)
+      const bullet = this.scene.physics.add.sprite(this.sprite.x, this.sprite.y, bulletTex)
       this.scene.bullets.add(bullet)
       bullet.setDisplaySize(12, 12)
-      bullet.setTint(0xff00ff)
-      
-      // 为子弹添加🔞贴图
-      this.scene.add.text(bullet.x, bullet.y, "🔞", { fontSize: "10px" })
-        .setOrigin(0.5)
-        .setDepth(8000)
-      
-      // 设置子弹速度和位置
-      const spd = 300
+      bullet.setTint(0xff66cc)
+      bullet.body?.setCircle(6)
+
+      const label = this.scene.add.text(bullet.x, bullet.y, "🔞", { fontSize: "12px" }).setOrigin(0.5).setDepth(8100)
+      bullet.emojiLabel = label
+      bullet.once("destroy", () => {
+        if (label?.active) label.destroy()
+      })
+
+      const spd = 320 + lv * 12
       const delay = i * 50
+      const ang = facing + Phaser.Math.FloatBetween(-spread, spread)
       this.scene.time.delayedCall(delay, () => {
         if (bullet.active) {
-          bullet.body?.velocity?.set(Math.cos(facing) * spd, Math.sin(facing) * spd)
+          bullet.body?.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
         }
       })
-      
-      const { damage, crit } = this.rollAttackDamage()
+
+      const { damage, crit } = this.rollAttackDamage(0.6 * lv)
       bullet.damage = damage
       bullet.isCrit = crit
       bullet.pierce = false
+      bullet.lifeEnd = this.scene.time.now + 1200
     }
-    
-    // 播放技能音效
-    this.scene.audioHub?.playSfx("weapon", 0.25)
+
+    this.scene.audioHub?.playCharacterSfx(this.charId, "skill", 0.22)
   }
 
   firePixieShots() {
@@ -630,7 +648,7 @@ clampToPlayArea() {
     const wlv = this.sys?.getWeaponLevel("pixie") ?? 0
     if (wlv < 1) return
 
-    const n = Math.min(3, wlv)
+    const n = Math.min(5, wlv + Math.floor(this.getProjectileBonus() / 2))
     const targets = this.pickVolleyTargets(Math.max(1, n))
     if (targets.length === 0) return
 
@@ -649,6 +667,7 @@ clampToPlayArea() {
       bullet.damage = damage
       bullet.isCrit = crit
       bullet.pierce = false
+      bullet.lifeEnd = this.scene.time.now + 1800
     }
   }
 
@@ -723,6 +742,5 @@ clampToPlayArea() {
 
     this.invulnerableUntil = now + 700
     if (this.hp < 0) this.hp = 0
-    console.log('[受伤后] body存在？', !!this.sprite.body);
   }
 }

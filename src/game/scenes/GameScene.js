@@ -54,6 +54,7 @@ export default class GameScene extends Phaser.Scene {
     this.playerHpBarBg = null
     this.expBar = null
     this.expBarBg = null
+    this.levelText = null
     this.pauseMenuElements = []
 
     this._groundZones = []
@@ -125,6 +126,7 @@ export default class GameScene extends Phaser.Scene {
     })
 
     const selected = this.registry.get("character") || "ranger"
+    this.selectedCharacterKey = selected
     const baseCfg = Characters[selected]
     const meta = getMetaForCharacter(selected)
     const config = {
@@ -139,6 +141,20 @@ export default class GameScene extends Phaser.Scene {
     if (!this.registry.get("playMode")) this.registry.set("playMode", "solo")
 
     this.player = new BasePlayer(this, 1000, 1000, config)
+    const textureKey = selected
+    if (this.textures.exists(textureKey)) {
+      this.player.sprite.setTexture(textureKey)
+    } else {
+      console.warn(`[GameScene] 纹理 "${textureKey}" 不存在`)
+      this.createFallbackTexture(textureKey, Characters[selected].name)
+      this.player.sprite.setTexture(textureKey)
+    }
+
+    this.player.baseScale = this.getUniformCharacterScale(textureKey, 54)
+    this.player.sprite.setScale(this.player.baseScale)
+    this.player.syncBodySize?.()
+
+
     this.player.skillSystem = new SkillSystem(this.player)
     this.player.skillSystem.initFromCharacter(config)
     this.player.refreshShieldFromWeapon()
@@ -195,7 +211,7 @@ export default class GameScene extends Phaser.Scene {
       const beforeHp = this.player.hp
       const beforeSh = this.player.currentShield
       this.player.takeDamage(18)
-      //bullet.destroy()
+      bullet?.destroy()
 
     
       if (this.player.hp < beforeHp || this.player.currentShield < beforeSh) this.flashPlayerHit()
@@ -241,20 +257,6 @@ export default class GameScene extends Phaser.Scene {
     })
 
     this.updateUIPosition(this.scale.width, this.scale.height)
-// 正确的属性劫持（放在玩家精灵创建后）
-let originalVisible = this.player.sprite.visible;
-Object.defineProperty(this.player.sprite, 'visible', {
-    get() {
-        return originalVisible;
-    },
-    set(value) {
-        if (value === false) {
-            console.trace(`🔥 玩家 visible 被设为 false！`);
-        }
-        originalVisible = value;
-    },
-    configurable: true
-});
   }
 
   getJoystickVector() {
@@ -349,6 +351,7 @@ Object.defineProperty(this.player.sprite, 'visible', {
     if (bullet.body && this.player.sprite) {
       this.physics.moveToObject(bullet, this.player.sprite, 260)
     }
+    bullet.lifeEnd = this.time.now + 4500
   }
 
   fireBossSpreadBurst() {
@@ -366,6 +369,7 @@ Object.defineProperty(this.player.sprite, 'visible', {
       if (bullet.body) {
         bullet.body.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
       }
+      bullet.lifeEnd = this.time.now + 4500
     }
   }
 
@@ -570,6 +574,7 @@ Object.defineProperty(this.player.sprite, 'visible', {
     b.isCrit = crit
     b.slowEnemy = true
     b.pierce = false
+    b.lifeEnd = this.time.now + 1400
   }
 
   triggerSolarBurst(player) {
@@ -606,13 +611,12 @@ Object.defineProperty(this.player.sprite, 'visible', {
     for (let i = 0; i < n; i++) {
       const ang = (Math.PI * 2 * i) / n + Phaser.Math.FloatBetween(-0.08, 0.08)
       const part = this.physics.add.sprite(px, py, "__WHITE")
-      console.log(part.body) 
       this.solarParticles.add(part)
       part.setTint(0xffcc44)
       part.setDisplaySize(9, 9)
       part.solarDotDps = dotBase
       const v = Phaser.Math.FloatBetween(150, 240)
-      part.body.setVelocity(Math.cos(ang) * v, Math.sin(ang) * v)
+      if (part.body) part.body.setVelocity(Math.cos(ang) * v, Math.sin(ang) * v)
       part.solarLifeEnd = this.time.now + 2600
     }
 
@@ -792,10 +796,10 @@ Object.defineProperty(this.player.sprite, 'visible', {
       .setOrigin(0.5)
 
     // 玩家血条（固定在玩家头上）
-    this.playerHpBarBg = this.add.rectangle(0, 0, 80, 10, 0x222222)
+    this.playerHpBarBg = this.add.rectangle(100, 100, 80, 5, 0x222222)
       .setDepth(8000)
       .setOrigin(0.5)
-    this.playerHpBar = this.add.rectangle(0, 0, 80, 10, 0xdd2200)
+    this.playerHpBar = this.add.rectangle(100, 100, 80, 5, 0xdd2200)
       .setDepth(8001)
       .setOrigin(0.5)
 
@@ -809,6 +813,15 @@ Object.defineProperty(this.player.sprite, 'visible', {
       .setScrollFactor(0)
       .setDepth(25001)
       .setOrigin(0.5)
+
+    this.levelText = this.add
+      .text(this.scale.width * 0.1, this.scale.height - 30, "Lv.1", {
+        fontSize: "14px",
+        color: "#ffe08a"
+      })
+      .setScrollFactor(0)
+      .setDepth(25002)
+      .setOrigin(0, 0.5)
 
     this.hudHint = this.add
       .text(pad, pad, "WASD/方向键 · 拾取升级 · 触屏左下摇杆", {
@@ -839,11 +852,18 @@ Object.defineProperty(this.player.sprite, 'visible', {
     const expRatio = Phaser.Math.Clamp(this.exp / this.expToNext, 0, 1)
     const expBarWidth = this.scale.width * 0.8
     this.expBar.width = expBarWidth * expRatio
+    this.levelText?.setText(`Lv.${this.level}`)
     
     this.hudTime.setText(`生存时间 ${Math.floor(this.survivalTime)} 秒`)
   }
 
   update(time, delta) {
+    if (!this.selectUiOpen && !this.gameOverActive && !this.isPaused && this.physics.world.isPaused) {
+      this.physics.resume()
+    }
+
+    if (this.player?.sprite && !this.gameOverActive) this.ensurePlayerRenderable()
+
     if (this.net?.connected && this.player?.sprite?.body) {
       const m = this.player.moveSpeed || 1
       const vx = this.player.sprite.body.velocity.x
@@ -864,10 +884,14 @@ Object.defineProperty(this.player.sprite, 'visible', {
     }
 
     this.player.update()
+    this.player.syncBodySize?.()
     this.spawnSystem.update(time, delta)
 
     this.updateGroundZonesLogic()
     this.tickWorldZonesAndDots()
+    this.updateBulletEmojiLabels()
+    this.cleanupProjectiles()
+    this.fallbackCombatChecks()
     this.updatePickupsMagnet(delta)
     this.updateBossBar()
 
@@ -887,7 +911,12 @@ Object.defineProperty(this.player.sprite, 'visible', {
     this.pickups.getChildren().forEach(pu => {
       if (!pu.active) return
       const d = Phaser.Math.Distance.Between(pu.x, pu.y, px, py)
-      if (d > r || d < 4) return
+      if (!pu.magnetized && pu.pickupType === "exp" && d <= r * 1.25) pu.magnetized = true
+      if (!pu.magnetized && d > r) return
+      if (d < 4) {
+        this.collectPickup(pu)
+        return
+      }
       pu.x += ((px - pu.x) / d) * speed * 12
       pu.y += ((py - pu.y) / d) * speed * 12
     })
@@ -905,6 +934,69 @@ Object.defineProperty(this.player.sprite, 'visible', {
     }
 
     this.refreshHud()
+  }
+
+  updateBulletEmojiLabels() {
+    this.bullets.getChildren().forEach(b => {
+      if (!b.emojiLabel) return
+      if (!b.active) {
+        b.emojiLabel.destroy()
+        b.emojiLabel = null
+        return
+      }
+      b.emojiLabel.setPosition(b.x, b.y)
+    })
+  }
+
+  cleanupProjectiles() {
+    const now = this.time.now
+    const margin = 120
+    const inWorld = obj =>
+      obj.x >= -margin && obj.y >= -margin && obj.x <= this.WORLD_W + margin && obj.y <= this.WORLD_H + margin
+
+    this.bullets.getChildren().forEach(b => {
+      if (!b.active) return
+      if ((b.lifeEnd && now >= b.lifeEnd) || !inWorld(b)) b.destroy()
+    })
+    this.bossBullets.getChildren().forEach(b => {
+      if (!b.active) return
+      if ((b.lifeEnd && now >= b.lifeEnd) || !inWorld(b)) b.destroy()
+    })
+  }
+
+  ensurePlayerRenderable() {
+    const s = this.player.sprite
+    if (!s.active) s.setActive(true)
+    if (!s.visible) s.setVisible(true)
+    if (!Number.isFinite(s.alpha) || s.alpha < 0.95) s.setAlpha(1)
+    if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) s.setPosition(this.WORLD_W * 0.5, this.WORLD_H * 0.5)
+    if (!Number.isFinite(s.scaleX) || s.scaleX < 0.01) s.setScale(this.player.baseScale || 0.2)
+    if (s.depth < 50) s.setDepth(500)
+    const desiredKey = this.selectedCharacterKey
+    if (desiredKey && this.textures.exists(desiredKey) && s.texture?.key !== desiredKey) {
+      s.setTexture(desiredKey)
+    }
+    if (!s.body) this.physics.world.enable(s)
+    if (s.body && s.body.enable === false) s.body.setEnable(true)
+  }
+
+  fallbackCombatChecks() {
+    const s = this.player?.sprite
+    if (!s?.active || this.selectUiOpen || this.gameOverActive) return
+
+    this.bossBullets.getChildren().forEach(b => {
+      if (!b.active) return
+      const d = Phaser.Math.Distance.Between(b.x, b.y, s.x, s.y)
+      const hitR = ((b.displayWidth || 16) + (s.displayWidth || 26)) * 0.32
+      if (d > hitR) return
+      const beforeHp = this.player.hp
+      const beforeSh = this.player.currentShield
+      this.player.takeDamage(18)
+      b.destroy()
+      if (this.player.hp < beforeHp || this.player.currentShield < beforeSh) this.flashPlayerHit()
+      this.refreshHud()
+      if (this.player.hp <= 0) this.showGameOver()
+    })
   }
 
   levelUp() {
@@ -1104,6 +1196,9 @@ Object.defineProperty(this.player.sprite, 'visible', {
 
     this.hudHint.setPosition(20, 20)
     this.hudTime.setPosition(20, 52)
+    this.expBarBg?.setPosition(width / 2, height - 30)
+    this.expBar?.setPosition(width / 2, height - 30)
+    this.levelText?.setPosition(width * 0.1, height - 30)
 
     if (this.bossHpBarBg) {
       const cx = width / 2
@@ -1308,6 +1403,12 @@ Object.defineProperty(this.player.sprite, 'visible', {
       .setOrigin(0, 0.5)
   }
 
+  getUniformCharacterScale(textureKey, targetHeight = 54) {
+    const source = this.textures.get(textureKey)?.getSourceImage?.()
+    if (!source?.height) return 0.24
+    return targetHeight / source.height
+  }
+
   updateBossBar() {
     if (!this.boss || !this.boss.active) {
       this.bossHpBar?.setVisible(false)
@@ -1326,7 +1427,8 @@ Object.defineProperty(this.player.sprite, 'visible', {
   flashPlayerHit() {
     const s = this.player.sprite
     s.setTint(0xff6666)
-    this.audioHub?.playCharacterSfx(this.player.charId, "hit_player", 0.5)
+    const char = this.registry.get("character")
+    this.audioHub?.playCharacterSfx(char, "hit", 0.5)
     this.time.delayedCall(120, () => s.clearTint())
   }
 
