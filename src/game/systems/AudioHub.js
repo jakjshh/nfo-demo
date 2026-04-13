@@ -8,7 +8,16 @@ const FILES = {
   hit_enemy: "sounds/hit_enemy.ogg",
   weapon: "sounds/weapon_swish.ogg",
   pickup: "sounds/pickup.ogg",
-  gold: "sounds/coin.ogg"
+  gold: "sounds/coin.ogg",
+  // 角色特定音效
+  //hit_player_ranger: "sounds/hit_player_ranger.ogg",
+  //hit_player_warrior: "sounds/hit_player_warrior.ogg",
+  //hit_player_mage: "sounds/hit_player_mage.ogg",
+  //hit_player_butterfly: "sounds/hit_player_butterfly.ogg",
+  //skill_ranger: "sounds/skill_ranger.ogg",
+  //skill_warrior: "sounds/skill_warrior.ogg",
+  //skill_mage: "sounds/skill_mage.ogg",
+  //skill_butterfly: "sounds/skill_butterfly.ogg"
 }
 
 export default class AudioHub {
@@ -39,6 +48,21 @@ export default class AudioHub {
     const k = `aud_${key}`
     if (!this.scene.cache.audio.exists(k)) return
     this.scene.sound.play(k, { volume: vol })
+  }
+
+  playCharacterSfx(charId, key, vol = 0.45) {
+    if (!this.loaded || !this.scene.sound) return
+    // 尝试播放角色特定的音效
+    const charKey = `aud_${key}_${charId}`
+    if (this.scene.cache.audio.exists(charKey)) {
+      this.scene.sound.play(charKey, { volume: vol })
+      return
+    }
+    // 如果角色特定音效不存在，播放通用音效
+    const defaultKey = `aud_${key}`
+    if (this.scene.cache.audio.exists(defaultKey)) {
+      this.scene.sound.play(defaultKey, { volume: vol })
+    }
   }
 
   startBgm(vol = 0.22) {

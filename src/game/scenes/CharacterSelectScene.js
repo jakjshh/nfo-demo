@@ -1,5 +1,6 @@
 import * as Phaser from "phaser"
 import { Characters } from "../data/CharacterConfig"
+import { Levels } from "../data/LevelConfig"
 import { loadGold } from "../data/persist"
 
 /**
@@ -16,23 +17,22 @@ export default class CharacterSelectScene extends Phaser.Scene {
     const h = this.scale.height
     const cx = w / 2
 
-    this.scrollY = 0
     this.selectedIndex = 0
     this.charKeys = Object.keys(Characters)
-    this.rowH = Math.min(78, Math.max(64, Math.floor(h / (this.charKeys.length + 3))))
-    this.listTop = 100
-    this.listBottomPad = 36
-    this.contentHeight = this.listTop + this.charKeys.length * this.rowH + this.listBottomPad
-    this.maxScroll = Math.max(0, this.contentHeight - h + 24)
+    this.levelKeys = Object.keys(Levels)
+    this.selectedLevelIndex = 0
 
     this.add
-      .text(cx, 36, "选择角色", { fontSize: `${Math.min(28, w * 0.06)}px`, color: "#fff" })
+      .text(cx, 36, "选择角色和关卡", {
+        fontSize: `${Math.min(28, w * 0.06)}px`,
+        color: "#fff"
+      })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(10)
 
     this.add
-      .text(cx, 64, `↑↓ · Enter 开战 · T/育成 技能树 · 持有金币 ${loadGold()}`, {
+      .text(cx, 64, `持有金币 ${loadGold()}`, {
         fontSize: "12px",
         color: "#8899aa"
       })
@@ -40,107 +40,197 @@ export default class CharacterSelectScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(10)
 
-    this.cardEntries = []
-
-    this.charKeys.forEach((key, i) => {
-      const c = Characters[key]
-      const y = this.listTop + i * this.rowH
-
-      const card = this.add
-        .rectangle(cx, y, Math.min(340, w - 32), this.rowH - 8, 0x222233)
-        .setInteractive({ useHandCursor: true })
-        .setStrokeStyle(0, 0x000000, 0)
-
-      const title = this.add
-        .text(cx, y - 12, c.name, {
-          fontSize: "18px",
-          color: "#fff"
-        })
-        .setOrigin(0.5)
-
-      const sub = this.add
-        .text(cx, y + 14, "一堆bug不会修都别选直接选耀阳行者", {
-          fontSize: "11px",
-          color: "#8899aa"
-        })
-        .setOrigin(0.5)
-
-      card.on("pointerdown", () => {
-        this.selectedIndex = i
-        this.refreshHighlight()
-        this.registry.set("character", key)
-        this.scene.start("GameScene")
+    // 角色选择区域
+    this.add
+      .text(cx - 150, 100, "角色", {
+        fontSize: "18px",
+        color: "#fff"
       })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-      const detailBtn = this.add
-        .text(cx - Math.min(150, w * 0.22), y, "育成", {
-          fontSize: "15px",
-          color: "#8ad8ff"
-        })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true })
-
-      detailBtn.on("pointerdown", pointer => {
-        pointer.event?.stopPropagation?.()
-        this.registry.set("detailCharacter", key)
-        this.scene.start("DetailScene")
+    // 关卡选择区域
+    this.add
+      .text(cx + 150, 100, "关卡", {
+        fontSize: "18px",
+        color: "#fff"
       })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-      this.cardEntries.push({ key, card, title, sub, detailBtn, baseY: y })
-    })
+    // 角色预览框
+    this.characterPreview = this.add
+      .rectangle(cx - 150, 150, 120, 120, 0x222233)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-    this.dragging = false
-    this.lastPointerY = 0
+    // 关卡预览框
+    this.levelPreview = this.add
+      .rectangle(cx + 150, 150, 120, 120, 0x222233)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-    this.input.on("pointerdown", p => {
-      if (p.y < 90) return
-      this.dragging = true
-      this.lastPointerY = p.y
-    })
+    // 角色左右箭头
+    this.charLeftArrow = this.add
+      .text(cx - 220, 150, "←", {
+        fontSize: "24px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
 
-    this.input.on("pointermove", p => {
-      if (!this.dragging) return
-      const dy = p.y - this.lastPointerY
-      this.lastPointerY = p.y
-      this.scrollY = Phaser.Math.Clamp(this.scrollY - dy, 0, this.maxScroll)
-      this.layoutList()
-    })
+    this.charRightArrow = this.add
+      .text(cx - 80, 150, "→", {
+        fontSize: "24px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
 
-    this.input.on("pointerup", () => {
-      this.dragging = false
-    })
+    // 关卡左右箭头
+    this.levelLeftArrow = this.add
+      .text(cx + 80, 150, "←", {
+        fontSize: "24px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
 
-    this.input.on("wheel", (_pointer, _go, _dx, dy) => {
-      this.scrollY = Phaser.Math.Clamp(this.scrollY + dy * 0.35, 0, this.maxScroll)
-      this.layoutList()
-    })
+    this.levelRightArrow = this.add
+      .text(cx + 220, 150, "→", {
+        fontSize: "24px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
 
-    this.input.keyboard.on("keydown-UP", () => {
-      this.selectedIndex = Phaser.Math.Clamp(this.selectedIndex - 1, 0, this.charKeys.length - 1)
-      this.ensureSelectionVisible()
-      this.refreshHighlight()
-    })
+    // 角色和关卡名称
+    this.characterName = this.add
+      .text(cx - 150, 200, Characters[this.charKeys[0]].name, {
+        fontSize: "14px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-    this.input.keyboard.on("keydown-DOWN", () => {
-      this.selectedIndex = Phaser.Math.Clamp(this.selectedIndex + 1, 0, this.charKeys.length - 1)
-      this.ensureSelectionVisible()
-      this.refreshHighlight()
-    })
+    this.levelName = this.add
+      .text(cx + 150, 200, Levels[this.levelKeys[0]].name, {
+        fontSize: "14px",
+        color: "#fff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
 
-    this.input.keyboard.on("keydown-ENTER", () => {
-      const key = this.charKeys[this.selectedIndex]
-      this.registry.set("character", key)
+    // 角色描述
+    this.characterDescription = this.add
+      .text(cx - 150, 220, Characters[this.charKeys[0]].description || "", {
+        fontSize: "12px",
+        color: "#8899aa",
+        align: "center",
+        wordWrap: {
+          width: 140
+        }
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+
+    // 关卡描述
+    this.levelDescription = this.add
+      .text(cx + 150, 220, Levels[this.levelKeys[0]].description || "", {
+        fontSize: "12px",
+        color: "#8899aa",
+        align: "center",
+        wordWrap: {
+          width: 140
+        }
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10)
+
+    // 开始游戏按钮
+    this.startButton = this.add
+      .rectangle(cx, h - 60, 200, 50, 0x2a4a2e, 0.8)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
+
+    this.add
+      .text(cx, h - 60, "开始游戏", {
+        fontSize: "18px",
+        color: "#ffffff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(11)
+
+    this.startButton.on("pointerdown", () => {
+      const charKey = this.charKeys[this.selectedIndex]
+      const levelKey = this.levelKeys[this.selectedLevelIndex]
+      this.registry.set("character", charKey)
+      this.registry.set("level", levelKey)
       this.scene.start("GameScene")
     })
 
-    this.input.keyboard.on("keydown-T", () => {
+    // 育成按钮
+    this.detailButton = this.add
+      .rectangle(cx - 150, h - 60, 100, 40, 0x2a2a4a, 0.8)
+      .setScrollFactor(0)
+      .setDepth(10)
+      .setInteractive({ useHandCursor: true })
+
+    this.add
+      .text(cx - 150, h - 60, "育成", {
+        fontSize: "14px",
+        color: "#8ad8ff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(11)
+
+    this.detailButton.on("pointerdown", () => {
       const key = this.charKeys[this.selectedIndex]
       this.registry.set("detailCharacter", key)
       this.scene.start("DetailScene")
     })
 
-    this.layoutList()
-    this.refreshHighlight()
+    // 角色箭头点击事件
+    this.charLeftArrow.on("pointerdown", () => {
+      this.selectedIndex = Phaser.Math.Clamp(this.selectedIndex - 1, 0, this.charKeys.length - 1)
+      this.updateCharacterPreview()
+    })
+
+    this.charRightArrow.on("pointerdown", () => {
+      this.selectedIndex = Phaser.Math.Clamp(this.selectedIndex + 1, 0, this.charKeys.length - 1)
+      this.updateCharacterPreview()
+    })
+
+    // 关卡箭头点击事件
+    this.levelLeftArrow.on("pointerdown", () => {
+      this.selectedLevelIndex = Phaser.Math.Clamp(this.selectedLevelIndex - 1, 0, this.levelKeys.length - 1)
+      this.updateLevelPreview()
+    })
+
+    this.levelRightArrow.on("pointerdown", () => {
+      this.selectedLevelIndex = Phaser.Math.Clamp(this.selectedLevelIndex + 1, 0, this.levelKeys.length - 1)
+      this.updateLevelPreview()
+    })
+
+    this.updateCharacterPreview()
+    this.updateLevelPreview()
 
     this.scale.on("resize", this.onResize, this)
   }
@@ -148,48 +238,30 @@ export default class CharacterSelectScene extends Phaser.Scene {
   onResize(gameSize) {
     const w = gameSize.width
     const h = gameSize.height
-    const cx = w / 2
-    this.rowH = Math.min(78, Math.max(64, Math.floor(h / (this.charKeys.length + 3))))
-    this.contentHeight = this.listTop + this.charKeys.length * this.rowH + this.listBottomPad
-    this.maxScroll = Math.max(0, this.contentHeight - h + 24)
-    this.scrollY = Phaser.Math.Clamp(this.scrollY, 0, this.maxScroll)
-
-    this.cardEntries.forEach((e, i) => {
-      e.baseY = this.listTop + i * this.rowH
-      e.card.setSize(Math.min(340, w - 32), this.rowH - 8)
-    })
-
-    this.layoutList()
-    this.refreshHighlight()
+    // 调整按钮位置
+    this.startButton.setPosition(w / 2, h - 60)
+    this.detailButton.setPosition(w / 2 - 150, h - 60)
   }
 
-  ensureSelectionVisible() {
-    const h = this.scale.height
-    const y = this.cardEntries[this.selectedIndex]?.baseY ?? 0
-    const visTop = this.scrollY + 88
-    const visBottom = this.scrollY + h - 24
-    if (y < visTop) this.scrollY = Math.max(0, y - 88)
-    if (y > visBottom - this.rowH) this.scrollY = Math.min(this.maxScroll, y - h + this.rowH + 36)
-    this.layoutList()
+  updateCharacterPreview() {
+    const charKey = this.charKeys[this.selectedIndex]
+    const character = Characters[charKey]
+    this.characterName.setText(character.name)
+    this.characterDescription.setText(character.description || "")
+    
+    // 这里可以添加角色预览图的逻辑
+    // 暂时使用颜色块代替
+    this.characterPreview.setFillStyle(0x334466)
   }
 
-  layoutList() {
-    const cx = this.scale.width / 2
-    const ox = Math.min(150, this.scale.width * 0.22)
-    this.cardEntries.forEach(e => {
-      const y = e.baseY - this.scrollY
-      e.card.setPosition(cx, y)
-      e.title.setPosition(cx, y - 12)
-      e.sub.setPosition(cx, y + 14)
-      if (e.detailBtn) e.detailBtn.setPosition(cx - ox, y)
-    })
-  }
-
-  refreshHighlight() {
-    this.cardEntries.forEach((e, i) => {
-      const on = i === this.selectedIndex
-      e.card.setFillStyle(on ? 0x334466 : 0x222233)
-      e.card.setStrokeStyle(on ? 3 : 0, on ? 0xffcc66 : 0x000000, on ? 1 : 0)
-    })
+  updateLevelPreview() {
+    const levelKey = this.levelKeys[this.selectedLevelIndex]
+    const level = Levels[levelKey]
+    this.levelName.setText(level.name)
+    this.levelDescription.setText(level.description || "")
+    
+    // 这里可以添加关卡预览图的逻辑
+    // 暂时使用颜色块代替
+    this.levelPreview.setFillStyle(0x443366)
   }
 }

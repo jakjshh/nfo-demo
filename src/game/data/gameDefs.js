@@ -70,6 +70,16 @@ export const WEAPON_META = {
     name: "黑洞",
     desc: "牵引范围内敌人向中心并造成伤害",
     maxLevel: 8
+  },
+  butterflyWing: {
+    name: "蝶翼煽动",
+    desc: "煽动翅膀对两侧敌人进行伤害和击退",
+    maxLevel: 8
+  },
+  bulletString: {
+    name: "子弹串",
+    desc: "射出来一串子弹，对敌人造成连续伤害",
+    maxLevel: 8
   }
 }
 

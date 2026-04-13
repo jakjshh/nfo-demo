@@ -4,7 +4,8 @@ export default class SpawnSystem {
     this.lastSpawn = 0
     this.lastWaveTime = 0
     this.wave = 1
-    this.nextBossAt = 60
+    this.bossSpawnTimes = [60, 180, 300] // 1min, 3min, 5min
+    this.spawnedBosses = 0
   }
 
   getChasePoints(scene, player) {
@@ -69,10 +70,10 @@ export default class SpawnSystem {
       this.lastWaveTime = t
     }
 
-    if (!scene.boss && t >= this.nextBossAt && t > 5) {
+    if (!scene.boss && this.spawnedBosses < this.bossSpawnTimes.length && t >= this.bossSpawnTimes[this.spawnedBosses] && t > 5) {
       this.spawnBoss()
       scene.onBossSpawned?.()
-      this.nextBossAt += 60
+      this.spawnedBosses++
     }
 
     const spawnInterval = Math.max(300, 1200 - t * 20)

@@ -158,6 +158,8 @@ export default class BasePlayer {
     this.hurricaneLastSpawn = now
     this.courageLastSpawn = now
     this.blackHoleLastSpawn = now
+    this.butterflyWingLastSpawn = now
+    this.bulletStringLastSpawn = now
 
     if (this.sys?.getWeaponLevel("arc") >= 1) {
       this.arcTimer = this.scene.time.addEvent({
@@ -185,7 +187,7 @@ export default class BasePlayer {
 
     const angle = this.getFacingAngle()
     this.scene.showMeleeArcFx(this.sprite.x, this.sprite.y, angle, this.meleeRange)
-    this.scene.audioHub?.playSfx("weapon", 0.25)
+    this.scene.audioHub?.playCharacterSfx(this.charId, "skill", 0.25)
 
     const targets = this.findEnemiesInMeleeArc()
     targets.forEach(enemy => {
@@ -208,20 +210,35 @@ export default class BasePlayer {
     return { damage, crit }
   }
 
-  clampToPlayArea() {
-    const scene = this.scene
-    const m = scene.playMargin ?? 0
-    const w = scene.WORLD_W
-    const h = scene.WORLD_H
-    const body = this.sprite.body
-    const hw = body.halfWidth
-    const hh = body.halfHeight
+clampToPlayArea() {
+    // 如果物理体不存在，先尝试重新启用
+    if (!this.sprite.body) {
+        console.warn('clampToPlayArea 时 body 丢失，尝试修复...');
+        this.scene.physics.world.enable(this.sprite);
+        // 如果启用后仍然没有 body，直接返回
+        if (!this.sprite.body) return;
+    }
 
-    this.sprite.x = Phaser.Math.Clamp(this.sprite.x, m + hw, w - m - hw)
-    this.sprite.y = Phaser.Math.Clamp(this.sprite.y, m + hh, h - m - hh)
-  }
+    const scene = this.scene;
+    const m = scene.playMargin ?? 0;
+    const w = scene.WORLD_W;
+    const h = scene.WORLD_H;
+    const body = this.sprite.body;
+    const hw = body.halfWidth;
+    const hh = body.halfHeight;
+
+    this.sprite.x = Phaser.Math.Clamp(this.sprite.x, m + hw, w - m - hw);
+    this.sprite.y = Phaser.Math.Clamp(this.sprite.y, m + hh, h - m - hh);
+}
 
   update() {
+    // 如果游戏未结束且玩家被隐藏，强制显示
+    if (this.sprite && !this.sprite.visible && !this.scene.gameOverActive) {
+        this.sprite.setVisible(true);
+    }
+
+
+    
     if (this.scene.isPausedGameplay?.()) {
       this.drawShieldOutline()
       return
@@ -254,7 +271,9 @@ export default class BasePlayer {
       vy /= len
     }
 
-    this.sprite.setVelocity(vx * speed, vy * speed)
+  if (this.sprite?.body) {
+  this.sprite.setVelocity(vx * speed, vy * speed)
+}
 
     if (len > 0.08) {
       this.lastMoveDir.set(vx, vy).normalize()
@@ -269,6 +288,8 @@ export default class BasePlayer {
     this.updateHurricane(now)
     this.updateCourageSong(now)
     this.updateBlackHole(now)
+    this.updateButterflyWing(now)
+    this.updateBulletString(now)
     this.updatePixieCompanion()
     this.updateHeroVisual()
     this.drawShieldOutline()
@@ -513,6 +534,97 @@ export default class BasePlayer {
     this.scene.spawnBlackHole(this.sprite.x + Phaser.Math.Between(-50, 50), this.sprite.y + Phaser.Math.Between(-50, 50), r)
   }
 
+  updateButterflyWing(now) {
+    if (!this.sys || this.sys.getWeaponLevel("butterflyWing") < 1) return
+    if (this.scene.isPausedGameplay?.()) return
+
+    const cd = Math.max(800, 1500 * this.cooldownMult)
+    if (now - this.butterflyWingLastSpawn < cd) return
+    this.butterflyWingLastSpawn = now
+
+    const facing = this.getFacingAngle()
+    const wingSpan = 80 + this.sys.getWeaponLevel("butterflyWing") * 10
+    
+    // 煽动翅膀的视觉效果
+    this.scene.add.rectangle(this.sprite.x, this.sprite.y, wingSpan * 2, 40, 0xff88ff, 0.3)
+      .setRotation(facing)
+      .setDepth(8000)
+    
+    // 对两侧敌人造成伤害和击退
+    this.scene.enemies.getChildren().forEach(enemy => {
+      if (!enemy.active) return
+      const dx = enemy.x - this.sprite.x
+      const dy = enemy.y - this.sprite.y
+      const d = Math.hypot(dx, dy)
+      if (d > wingSpan) return
+      
+      // 计算敌人相对于玩家的角度
+      const enemyAngle = Math.atan2(dy, dx)
+      const angleDiff = Math.abs(enemyAngle - facing)
+      
+      // 只对两侧一定角度范围内的敌人造成伤害
+      if (angleDiff > Math.PI / 4 && angleDiff < 3 * Math.PI / 4) {
+        const { damage, crit } = this.rollAttackDamage()
+        enemy.hp -= damage
+        this.scene.onEnemyDamaged(enemy, damage, crit)
+        this.scene.resolveEnemyDeath(enemy)
+        
+        // 击退效果
+        const knockback = 100 + this.sys.getWeaponLevel("butterflyWing") * 10
+        const knockbackAngle = enemyAngle + Math.PI
+        enemy.x += Math.cos(knockbackAngle) * knockback
+        enemy.y += Math.sin(knockbackAngle) * knockback
+      }
+    })
+    
+    // 播放技能音效
+    this.scene.audioHub?.playCharacterSfx(this.charId, "skill", 0.25)
+  }
+
+  updateBulletString(now) {
+    if (!this.sys || this.sys.getWeaponLevel("bulletString") < 1) return
+    if (this.scene.isPausedGameplay?.()) return
+
+    const cd = Math.max(600, 1200 * this.cooldownMult)
+    if (now - this.bulletStringLastSpawn < cd) return
+    this.bulletStringLastSpawn = now
+
+    const facing = this.getFacingAngle()
+    const bulletCount = 3 + this.sys.getWeaponLevel("bulletString")
+    const bulletSpacing = 20
+    
+    // 射出一串子弹
+    for (let i = 0; i < bulletCount; i++) {
+      const bt = "__WHITE"
+      const bullet = this.scene.physics.add.sprite(this.sprite.x, this.sprite.y, bt)
+      this.scene.bullets.add(bullet)
+      bullet.setDisplaySize(12, 12)
+      bullet.setTint(0xff00ff)
+      
+      // 为子弹添加🔞贴图
+      this.scene.add.text(bullet.x, bullet.y, "🔞", { fontSize: "10px" })
+        .setOrigin(0.5)
+        .setDepth(8000)
+      
+      // 设置子弹速度和位置
+      const spd = 300
+      const delay = i * 50
+      this.scene.time.delayedCall(delay, () => {
+        if (bullet.active) {
+          bullet.body?.velocity?.set(Math.cos(facing) * spd, Math.sin(facing) * spd)
+        }
+      })
+      
+      const { damage, crit } = this.rollAttackDamage()
+      bullet.damage = damage
+      bullet.isCrit = crit
+      bullet.pierce = false
+    }
+    
+    // 播放技能音效
+    this.scene.audioHub?.playSfx("weapon", 0.25)
+  }
+
   firePixieShots() {
     if (this.scene.isPausedGameplay?.()) return
     const wlv = this.sys?.getWeaponLevel("pixie") ?? 0
@@ -587,6 +699,7 @@ export default class BasePlayer {
    * 额外「护盾存在时的防御」仅当扣血时护盾仍未破才生效（本帧内盾碎则余伤不吃盾防）。
    */
   takeDamage(amount) {
+
     const now = this.scene.time.now
     if (now < this.invulnerableUntil) return
 
@@ -610,5 +723,6 @@ export default class BasePlayer {
 
     this.invulnerableUntil = now + 700
     if (this.hp < 0) this.hp = 0
+    console.log('[受伤后] body存在？', !!this.sprite.body);
   }
 }

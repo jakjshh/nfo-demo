@@ -20,10 +20,14 @@ export default class GameScene extends Phaser.Scene {
     ensurePlaceholderTextures(this)
     this.audioHub = new AudioHub(this)
     this.audioHub.preload()
+    
+    // 加载关卡相关资源
+    const level = this.registry.get("level") || "forest"
+    // 这里可以根据关卡加载不同的背景贴图
   }
 
   isPausedGameplay() {
-    return this.selectUiOpen || this.gameOverActive || this.physics.world.isPaused === true
+    return this.selectUiOpen || this.gameOverActive || this.physics.world.isPaused === true || this.isPaused
   }
 
   create() {
@@ -38,11 +42,19 @@ export default class GameScene extends Phaser.Scene {
 
     this.selectUiOpen = false
     this.gameOverActive = false
+    this.isPaused = false
 
     this.boss = null
     this.bossHpBar = null
     this.bossHpBarBg = null
     this.bossAttackTimer = null
+    this.defeatedBosses = 0
+
+    this.playerHpBar = null
+    this.playerHpBarBg = null
+    this.expBar = null
+    this.expBarBg = null
+    this.pauseMenuElements = []
 
     this._groundZones = []
     this._blizzards = []
@@ -63,11 +75,34 @@ export default class GameScene extends Phaser.Scene {
 
     this.drawMapBoundaries()
 
+    // 根据选中的关卡设置背景
+    const level = this.registry.get("level") || "forest"
+    this.currentLevel = level
+    
     this.bgTile = this.add
       .tileSprite(0, 0, this.WORLD_W, this.WORLD_H, "bg_map")
       .setOrigin(0, 0)
       .setDepth(-2500)
       .setScrollFactor(1)
+    
+    // 根据关卡设置不同的背景颜色或纹理
+    switch(level) {
+      case "forest":
+        this.bgTile.setTint(0x228822)
+        break
+      case "desert":
+        this.bgTile.setTint(0xffdd88)
+        break
+      case "ice":
+        this.bgTile.setTint(0x88ccff)
+        break
+      case "volcano":
+        this.bgTile.setTint(0xff8844)
+        break
+      default:
+        this.bgTile.setTint(0x222222)
+        break
+    }
 
     /*
      * ========== 地图碰撞（图片/瓦片）基础架构 ==========
@@ -160,11 +195,14 @@ export default class GameScene extends Phaser.Scene {
       const beforeHp = this.player.hp
       const beforeSh = this.player.currentShield
       this.player.takeDamage(18)
-      bullet.destroy()
+      //bullet.destroy()
+
+    
       if (this.player.hp < beforeHp || this.player.currentShield < beforeSh) this.flashPlayerHit()
       this.refreshHud()
       if (this.player.hp <= 0) this.showGameOver()
     })
+
 
     this.physics.add.overlap(this.player.sprite, this.pickups, (ps, pickup) => {
       this.collectPickup(pickup)
@@ -193,7 +231,7 @@ export default class GameScene extends Phaser.Scene {
     this.setupVirtualJoystick()
 
     this.input.keyboard.on("keydown-R", () => {
-      if (this.gameOverActive) this.scene.start("SelectScene")
+      if (this.gameOverActive) this.scene.start("ModeScene")
     })
 
     this.events.once("shutdown", () => {
@@ -203,6 +241,20 @@ export default class GameScene extends Phaser.Scene {
     })
 
     this.updateUIPosition(this.scale.width, this.scale.height)
+// 正确的属性劫持（放在玩家精灵创建后）
+let originalVisible = this.player.sprite.visible;
+Object.defineProperty(this.player.sprite, 'visible', {
+    get() {
+        return originalVisible;
+    },
+    set(value) {
+        if (value === false) {
+            console.trace(`🔥 玩家 visible 被设为 false！`);
+        }
+        originalVisible = value;
+    },
+    configurable: true
+});
   }
 
   getJoystickVector() {
@@ -294,7 +346,9 @@ export default class GameScene extends Phaser.Scene {
     this.bossBullets.add(bullet)
     if (tk === "__WHITE") bullet.setTint(0xff3300)
     bullet.setDisplaySize(22, 22)
-    this.physics.moveToObject(bullet, this.player.sprite, 260)
+    if (bullet.body && this.player.sprite) {
+      this.physics.moveToObject(bullet, this.player.sprite, 260)
+    }
   }
 
   fireBossSpreadBurst() {
@@ -309,7 +363,9 @@ export default class GameScene extends Phaser.Scene {
       if (tk === "__WHITE") bullet.setTint(0xff6633)
       bullet.setDisplaySize(18, 18)
       const spd = 195
-      bullet.body?.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
+      if (bullet.body) {
+        bullet.body.velocity?.set(Math.cos(ang) * spd, Math.sin(ang) * spd)
+      }
     }
   }
 
@@ -550,6 +606,7 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < n; i++) {
       const ang = (Math.PI * 2 * i) / n + Phaser.Math.FloatBetween(-0.08, 0.08)
       const part = this.physics.add.sprite(px, py, "__WHITE")
+      console.log(part.body) 
       this.solarParticles.add(part)
       part.setTint(0xffcc44)
       part.setDisplaySize(9, 9)
@@ -723,18 +780,38 @@ export default class GameScene extends Phaser.Scene {
   buildHud() {
     const pad = 20
 
-    this.hudHp = this.add.text(pad, pad, "", { fontSize: "18px", color: "#e0ffe0" })
+    // 暂停按钮
+    this.pauseButton = this.add.rectangle(this.scale.width - 60, 60, 40, 40, 0x222222, 0.7)
       .setScrollFactor(0)
-      .setDepth(5000)
-      .setOrigin(0, 0)
+      .setDepth(25000)
+      .setInteractive()
+      .on("pointerdown", () => this.togglePause())
+    this.add.text(this.scale.width - 60, 60, "⏸", { fontSize: "20px" })
+      .setScrollFactor(0)
+      .setDepth(25001)
+      .setOrigin(0.5)
 
-    this.hudExp = this.add.text(pad, pad + 32, "", { fontSize: "16px", color: "#ffe08a" })
+    // 玩家血条（固定在玩家头上）
+    this.playerHpBarBg = this.add.rectangle(0, 0, 80, 10, 0x222222)
+      .setDepth(8000)
+      .setOrigin(0.5)
+    this.playerHpBar = this.add.rectangle(0, 0, 80, 10, 0xdd2200)
+      .setDepth(8001)
+      .setOrigin(0.5)
+
+    // 经验条（固定在屏幕下方）
+    const expBarWidth = this.scale.width * 0.8
+    this.expBarBg = this.add.rectangle(this.scale.width / 2, this.scale.height - 30, expBarWidth, 12, 0x222222)
       .setScrollFactor(0)
-      .setDepth(5000)
-      .setOrigin(0, 0)
+      .setDepth(25000)
+      .setOrigin(0.5)
+    this.expBar = this.add.rectangle(this.scale.width / 2, this.scale.height - 30, expBarWidth, 12, 0xffaa00)
+      .setScrollFactor(0)
+      .setDepth(25001)
+      .setOrigin(0.5)
 
     this.hudHint = this.add
-      .text(pad, pad + 64, "WASD/方向键 · 拾取升级 · 触屏左下摇杆", {
+      .text(pad, pad, "WASD/方向键 · 拾取升级 · 触屏左下摇杆", {
         fontSize: "12px",
         color: "#aaa"
       })
@@ -742,7 +819,7 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(5000)
       .setOrigin(0, 0)
 
-    this.hudTime = this.add.text(pad, pad + 96, "", {
+    this.hudTime = this.add.text(pad, pad + 24, "", {
       fontSize: "16px",
       color: "#a8d8ff"
     })
@@ -754,11 +831,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   refreshHud() {
-    const sh = this.player.currentShield > 0 ? ` · 护盾 ${Math.ceil(this.player.currentShield)}` : ""
-    this.hudHp.setText(`生命 ${Math.ceil(this.player.hp)} / ${this.player.maxHp}${sh}`)
-    this.hudExp.setText(
-      `等级 ${this.level} · 经验 ${this.exp} / ${this.expToNext} · 本局金币 ${this.runGold ?? 0}`
-    )
+    // 更新血条
+    const hpRatio = Phaser.Math.Clamp(this.player.hp / this.player.maxHp, 0, 1)
+    this.playerHpBar.width = 80 * hpRatio
+    
+    // 更新经验条
+    const expRatio = Phaser.Math.Clamp(this.exp / this.expToNext, 0, 1)
+    const expBarWidth = this.scale.width * 0.8
+    this.expBar.width = expBarWidth * expRatio
+    
     this.hudTime.setText(`生存时间 ${Math.floor(this.survivalTime)} 秒`)
   }
 
@@ -776,6 +857,12 @@ export default class GameScene extends Phaser.Scene {
       this.bgTile.tilePositionY = this.cameras.main.scrollY * 0.06
     }
 
+    // 使血条跟随玩家移动
+    if (this.playerHpBar && this.playerHpBarBg && this.player.sprite) {
+      this.playerHpBar.setPosition(this.player.sprite.x, this.player.sprite.y - 30)
+      this.playerHpBarBg.setPosition(this.player.sprite.x, this.player.sprite.y - 30)
+    }
+
     this.player.update()
     this.spawnSystem.update(time, delta)
 
@@ -784,7 +871,7 @@ export default class GameScene extends Phaser.Scene {
     this.updatePickupsMagnet(delta)
     this.updateBossBar()
 
-    if (!this.selectUiOpen && !this.gameOverActive) {
+    if (!this.selectUiOpen && !this.gameOverActive && !this.isPaused) {
       this.survivalTime += delta / 1000
       this.refreshHud()
     }
@@ -1015,10 +1102,8 @@ export default class GameScene extends Phaser.Scene {
       slot.lvl.setPosition(x - 3, row2Y + size - 12)
     })
 
-    this.hudHp.setPosition(20, 20)
-    this.hudExp.setPosition(20, 52)
-    this.hudHint.setPosition(20, 84)
-    this.hudTime.setPosition(20, 116)
+    this.hudHint.setPosition(20, 20)
+    this.hudTime.setPosition(20, 52)
 
     if (this.bossHpBarBg) {
       const cx = width / 2
@@ -1081,7 +1166,9 @@ export default class GameScene extends Phaser.Scene {
       hurricane: "🌀",
       courageSong: "▭",
       pixie: "🧚",
-      blackHole: "◉"
+      blackHole: "◉",
+      butterflyWing: "🦋",
+      bulletString: "🔞"
     }
     return map[key] || "?"
   }
@@ -1118,6 +1205,10 @@ export default class GameScene extends Phaser.Scene {
       if (this.bossAttackTimer) {
         this.bossAttackTimer.remove()
         this.bossAttackTimer = null
+      }
+      this.defeatedBosses++
+      if (this.defeatedBosses >= 3) {
+        this.showVictory()
       }
     }
 
@@ -1235,7 +1326,7 @@ export default class GameScene extends Phaser.Scene {
   flashPlayerHit() {
     const s = this.player.sprite
     s.setTint(0xff6666)
-    this.audioHub?.playSfx("hit_player", 0.5)
+    this.audioHub?.playCharacterSfx(this.player.charId, "hit_player", 0.5)
     this.time.delayedCall(120, () => s.clearTint())
   }
 
@@ -1304,6 +1395,133 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+togglePause() {
+    this.isPaused = !this.isPaused;
+
+    if (this.isPaused) {
+        this.physics.pause();
+
+        const cam = this.cameras.main;
+        const cx = cam.width / 2;
+        const cy = cam.height / 2;
+
+        // 用一个数组收纳所有暂停 UI 元素，方便统一销毁
+        const elements = [];
+
+        // 背景遮罩
+        const bg = this.add.rectangle(cx, cy, cam.width * 0.8, cam.height * 0.6, 0x1a1a2e, 0.95)
+            .setScrollFactor(0)
+            .setDepth(14000)
+            .setOrigin(0.5);
+        elements.push(bg);
+
+        // 标题
+        const title = this.add.text(cx, cy - 80, "游戏暂停", {
+            fontSize: "32px",
+            color: "#ffffff"
+        })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(14001);
+        elements.push(title);
+
+        // 继续按钮（矩形 + 文字）
+        const continueBtn = this.add.rectangle(cx, cy, 200, 50, 0x2a4a2e, 0.8)
+            .setScrollFactor(0)
+            .setDepth(14001)
+            .setInteractive();
+        const continueText = this.add.text(cx, cy, "继续游戏", {
+            fontSize: "18px",
+            color: "#ffffff"
+        })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(14002);
+        elements.push(continueBtn, continueText);
+
+        continueBtn.on("pointerdown", () => {
+            this.isPaused = false;
+            this.physics.resume();
+            // 销毁所有暂停 UI
+            elements.forEach(el => el.destroy());
+        });
+
+        // 重新开始按钮
+        const restartBtn = this.add.rectangle(cx, cy + 70, 200, 50, 0x4a2a2e, 0.8)
+            .setScrollFactor(0)
+            .setDepth(14001)
+            .setInteractive();
+        const restartText = this.add.text(cx, cy + 70, "重新开始", {
+            fontSize: "18px",
+            color: "#ffffff"
+        })
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(14002);
+        elements.push(restartBtn, restartText);
+
+        restartBtn.on("pointerdown", () => {
+            // 跳转到模式选择场景（注意键名是否正确）
+            this.scene.start("ModeScene");
+        });
+
+        // 保存元素数组以便外部可能需要访问（可选）
+        this.pauseMenuElements = elements;
+    } else {
+        this.physics.resume();
+        // 如果外部通过其他方式取消暂停，也要销毁 UI
+        if (this.pauseMenuElements) {
+            this.pauseMenuElements.forEach(el => el.destroy());
+            this.pauseMenuElements = null;
+        }
+    }
+}
+
+  showVictory() {
+    if (this.gameOverActive) return
+
+    this.gameOverActive = true
+    saveGold(loadGold() + (this.runGold || 0))
+    this.runGold = 0
+
+    this.physics.pause()
+
+    const cam = this.cameras.main
+    const cx = cam.width / 2
+    const cy = cam.height / 2
+
+    this.add.rectangle(cx, cy, cam.width, cam.height, 0x051a05, 0.88)
+      .setScrollFactor(0)
+      .setDepth(13000)
+
+    this.add
+      .text(cx, cy - 24, "胜利！", {
+        fontSize: "36px",
+        color: "#88ff88"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(13001)
+
+    // 重新开始按钮
+    this.add.rectangle(cx, cy + 28, 200, 50, 0x2a4a2e, 0.8)
+      .setScrollFactor(0)
+      .setDepth(13001)
+      .setInteractive()
+      .on("pointerdown", () => {
+        this.scene.start("ModeScene")
+      })
+
+    this.add
+      .text(cx, cy + 28, "重新开始", {
+        fontSize: "18px",
+        color: "#ffffff"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(13002)
+  }
+
   showGameOver() {
     if (this.gameOverActive) return
 
@@ -1330,13 +1548,22 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(13001)
 
+    // 重新开始按钮
+    this.add.rectangle(cx, cy + 28, 200, 50, 0x4a2a2e, 0.8)
+      .setScrollFactor(0)
+      .setDepth(13001)
+      .setInteractive()
+      .on("pointerdown", () => {
+        this.scene.start("ModeScene")
+      })
+
     this.add
-      .text(cx, cy + 28, "按 R 重新开始", {
-        fontSize: "20px",
-        color: "#eee"
+      .text(cx, cy + 28, "重新开始", {
+        fontSize: "18px",
+        color: "#ffffff"
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(13001)
+      .setDepth(13002)
   }
 }

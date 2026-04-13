@@ -149,6 +149,13 @@ export default class SkillSystem {
           p.blackHoleRadiusBonus += 10
           p.blackHolePullBonus += 0.15
           break
+        case "butterflyWing":
+          p.attack += 1
+          p.moveSpeed += 5
+          break
+        case "bulletString":
+          p.attack += 1.5
+          break
         default:
           break
       }
