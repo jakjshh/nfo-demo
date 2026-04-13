@@ -11,7 +11,16 @@ export default class CharacterSelectScene extends Phaser.Scene {
   constructor() {
     super("SelectScene")
   }
-
+preload() {
+    // 遍历所有角色，加载对应的图片
+    for (let key in Characters) {
+        const path = Characters[key].imagePath;
+        if (path) {
+            // 使用角色键（如 'ranger'）作为纹理键名，方便后续直接 setTexture(key)
+            this.load.image(key, path);
+        }
+    }
+}
   create() {
     const w = this.scale.width
     const h = this.scale.height
@@ -42,7 +51,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 角色选择区域
     this.add
-      .text(cx - 150, 100, "角色", {
+      .text(cx - 0, 130, "角色", {
         fontSize: "18px",
         color: "#fff"
       })
@@ -52,7 +61,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 关卡选择区域
     this.add
-      .text(cx + 150, 100, "关卡", {
+      .text(cx + 0, 380, "关卡", {
         fontSize: "18px",
         color: "#fff"
       })
@@ -62,19 +71,19 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 角色预览框
     this.characterPreview = this.add
-      .rectangle(cx - 150, 150, 120, 120, 0x222233)
+      .rectangle(cx - 0, 200, 200, 120, 0x222233)
       .setScrollFactor(0)
       .setDepth(10)
 
     // 关卡预览框
     this.levelPreview = this.add
-      .rectangle(cx + 150, 150, 120, 120, 0x222233)
+      .rectangle(cx + 0, 450, 200, 120, 0x222233)
       .setScrollFactor(0)
       .setDepth(10)
 
     // 角色左右箭头
     this.charLeftArrow = this.add
-      .text(cx - 220, 150, "←", {
+      .text(cx - 120, 200, "←", {
         fontSize: "24px",
         color: "#fff"
       })
@@ -84,7 +93,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
 
     this.charRightArrow = this.add
-      .text(cx - 80, 150, "→", {
+      .text(cx + 120, 200, "→", {
         fontSize: "24px",
         color: "#fff"
       })
@@ -95,7 +104,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 关卡左右箭头
     this.levelLeftArrow = this.add
-      .text(cx + 80, 150, "←", {
+      .text(cx - 120, 420, "←", {
         fontSize: "24px",
         color: "#fff"
       })
@@ -105,7 +114,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
 
     this.levelRightArrow = this.add
-      .text(cx + 220, 150, "→", {
+      .text(cx + 120, 420, "→", {
         fontSize: "24px",
         color: "#fff"
       })
@@ -116,7 +125,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 角色和关卡名称
     this.characterName = this.add
-      .text(cx - 150, 200, Characters[this.charKeys[0]].name, {
+      .text(cx , 280, Characters[this.charKeys[0]].name, {
         fontSize: "14px",
         color: "#fff"
       })
@@ -125,7 +134,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
       .setDepth(10)
 
     this.levelName = this.add
-      .text(cx + 150, 200, Levels[this.levelKeys[0]].name, {
+      .text(cx , 530, Levels[this.levelKeys[0]].name, {
         fontSize: "14px",
         color: "#fff"
       })
@@ -135,7 +144,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 角色描述
     this.characterDescription = this.add
-      .text(cx - 150, 220, Characters[this.charKeys[0]].description || "", {
+      .text(cx , 300, Characters[this.charKeys[0]].description || "", {
         fontSize: "12px",
         color: "#8899aa",
         align: "center",
@@ -149,7 +158,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     // 关卡描述
     this.levelDescription = this.add
-      .text(cx + 150, 220, Levels[this.levelKeys[0]].description || "", {
+      .text(cx , 550, Levels[this.levelKeys[0]].description || "", {
         fontSize: "12px",
         color: "#8899aa",
         align: "center",

@@ -9,7 +9,8 @@ export const Characters = {
     critChance: 0.05,
     critDamageMult: 1.5,
     startingWeapons: ["trackingVolley"],
-    startingSkills: ["attack"]
+    startingSkills: ["attack"],
+    imagePath: "assets/images/characters/ranger.png"
   },
 
   melee: {
@@ -22,7 +23,8 @@ export const Characters = {
     critChance: 0.08,
     critDamageMult: 1.55,
     startingWeapons: ["arc"],
-    startingSkills: ["aoeRadius"]
+    startingSkills: ["aoeRadius"],
+    imagePath: "assets/images/characters/melee.png"
   },
 
   priest: {
@@ -35,7 +37,8 @@ export const Characters = {
     critChance: 0.05,
     critDamageMult: 1.5,
     startingWeapons: ["laser"],
-    startingSkills: ["vitality"]
+    startingSkills: ["vitality"],
+    imagePath: "assets/images/characters/priest.png"
   },
 
   mage: {
@@ -48,7 +51,8 @@ export const Characters = {
     critChance: 0.06,
     critDamageMult: 1.52,
     startingWeapons: ["groundZones"],
-    startingSkills: ["skillTempo"]
+    startingSkills: ["skillTempo"],
+    imagePath: "assets/images/characters/mage.png"  
   },
 
   shieldbearer: {
@@ -61,7 +65,8 @@ export const Characters = {
     critChance: 0.05,
     critDamageMult: 1.45,
     startingWeapons: ["shieldWeapon"],
-    startingSkills: ["defense"]
+    startingSkills: ["defense"],
+    imagePath: "assets/images/characters/shieldbearer.png"    
   },
 
   yyxr: {
@@ -74,7 +79,8 @@ export const Characters = {
     critChance: 0.06,
     critDamageMult: 1.52,
     startingWeapons: ["solarBurst"],
-    startingSkills: ["skillTempo"]
+    startingSkills: ["skillTempo"],
+    imagePath: "assets/images/characters/yyxr.png"
   },
 
   butterfly: {
@@ -87,6 +93,7 @@ export const Characters = {
     critChance: 0.07,
     critDamageMult: 1.5,
     startingWeapons: ["butterflyWing"],
-    startingSkills: ["attack"]
+    startingSkills: ["attack"],
+    imagePath: "assets/images/characters/butterfly.png"
   }
 }
